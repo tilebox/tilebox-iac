@@ -16,6 +16,14 @@ dependencies = [
 [dependency-groups]
 dev = ["pyright>=1.1.404", "ruff>=0.12.7"]
 
+[tool.uv.build-backend]
+module-name = "tilebox_iac"
+module-root = ""
+
+[build-system]
+requires = ["uv_build>=0.9.6,<0.10.0"]
+build-backend = "uv_build"
+
 [tool.ruff]
 # settings applying to all ruff subcommands, such as `ruff check` (lint) and `ruff format`
 line-length = 120
