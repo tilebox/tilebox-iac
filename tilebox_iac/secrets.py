@@ -11,6 +11,14 @@ class Secret(ComponentResource):
         is_secret_data_base64: bool | None = None,
         opts: ResourceOptions | None = None,
     ) -> None:
+        """A secret stored in GCP Secret Manager.
+
+        Args:
+            name: Secret name.
+            secret_data: Secret data.
+            is_secret_data_base64: Whether the secret data is base64-encoded.
+            opts: Pulumi resource options.
+        """
         super().__init__("tilebox:secrets:Secret", name, opts=opts)
 
         self.resource_name = name

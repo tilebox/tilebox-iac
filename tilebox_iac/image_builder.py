@@ -13,14 +13,24 @@ class LocalBuildTrigger(ComponentResource):
         gcp_region: str,
         gcp_project: str,
         repository_id: Input[str],
-        workflow_dir: Path,
+        source_dir: Path,
         opts: ResourceOptions | None = None,
     ) -> None:
+        """A local build trigger that builds a Docker image on code changes and pushes it to a Google Artifact Registry repository.
+
+        Args:
+            name: Name of the image.
+            gcp_region: Region of the GCP project.
+            gcp_project: GCP project ID.
+            repository_id: ID of the artifact registry repository.
+            source_dir: Path to the source directory.
+            opts: Pulumi resource options.
+        """
         super().__init__("tilebox:LocalBuildTrigger", name, opts=opts)
         hostname = f"{gcp_region}-docker.pkg.dev"
 
-        # Calculate the hash of the workflow code to use as an immutable image tag.
-        self.tag = dirhash(workflow_dir, "sha256", match=["*.py", "*.toml", "Dockerfile", "*.md"], ignore=[".venv/*"])
+        # Calculate the hash of the source code to use as an immutable image tag.
+        self.tag = dirhash(source_dir, "sha256", match=["*.py", "*.toml", "Dockerfile", "*.md"], ignore=[".venv/*"])
 
         def build_config(repo_id: str) -> str:
             # https://cloud.google.com/build/docs/build-config-file-schema
@@ -78,7 +88,7 @@ class LocalBuildTrigger(ComponentResource):
 
         self.cloud_build = Command(
             f"{name}-cloud-build-image",
-            create=f"gcloud builds submit --config=/dev/stdin --project={gcp_project} {workflow_dir}",
+            create=f"gcloud builds submit --config=/dev/stdin --project={gcp_project} {source_dir}",
             stdin=Output.from_input(repository_id).apply(build_config),
             # The 'triggers' property ensures this command re-runs when the code changes.
             triggers=[self.tag],

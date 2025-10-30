@@ -19,7 +19,8 @@ env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=Tru
 template = env.get_template("cloud-init.yaml")
 
 
-def get_cloud_init(kwargs: dict[str, Any]) -> str:
+def _get_cloud_init(kwargs: dict[str, Any]) -> str:
+    """Render the cloud-init config for the VMs."""
     image: str = kwargs["image"]
     tag: str = kwargs["tag"]
     environment_variables: dict[str, str] = kwargs["environment_variables"]
@@ -54,6 +55,22 @@ class AutoScalingGCPCluster(ComponentResource):
         roles: ServiceAccountConfigDict | None = None,
         opts: ResourceOptions | None = None,
     ) -> None:
+        """An auto-scaling cluster of Spot instances running a Docker container.
+
+        Args:
+            name: Name of the cluster.
+            container: Container image to run.
+            gcp_project: GCP project ID to deploy the cluster in.
+            gcp_region: Region to deploy the cluster in.
+            machine_type: Machine type to use for the VMs.
+            cpu_target: CPU target for autoscaling.
+            cluster_enabled : Whether the cluster is enabled.
+            min_replicas_config: Minimum number of replicas.
+            max_replicas_config: Maximum number of replicas.
+            environment_variables: Environment variables to pass to the container.
+            roles: Roles to assign to the service account.
+            opts: Pulumi resource options.
+        """
         super().__init__("tilebox:AutoScalingGCPCluster", name, opts=opts)
 
         if container.get("tag") == "":
@@ -120,7 +137,7 @@ class AutoScalingGCPCluster(ComponentResource):
             tag=container.get("tag", "latest"),
             environment_variables=envs,
             secrets=secrets,
-        ).apply(get_cloud_init)
+        ).apply(_get_cloud_init)
 
         # Define the Instance Template for the MIG
         instance_template = InstanceTemplate(
