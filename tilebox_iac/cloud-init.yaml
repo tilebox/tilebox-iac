@@ -1,0 +1,65 @@
+#cloud-config
+
+write_files:
+- path: /tmp/fetch-secrets.sh
+  permissions: 0755
+  owner: root
+  content: |
+    #!/bin/bash
+    # Fetch GCP secrets from Secret Manager using metadata server
+    # and write them to an environment file
+
+    set -euo pipefail
+
+    OUTPUT_FILE="${1:-/tmp/secrets.env}"
+
+    # Get access token from metadata server
+    get_access_token() {
+        curl -s -H "Metadata-Flavor: Google" \
+            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+            | jq -r ".access_token"
+    }
+
+    # Fetch a secret from Secret Manager
+    fetch_secret() {
+        local secret_name="$1"
+        local access_token="$2"
+
+        curl -s -H "Authorization: Bearer ${access_token}" \
+            "https://secretmanager.googleapis.com/v1/${secret_name}/versions/latest:access" \
+            | jq -r ".payload.data" \
+            | base64 -d
+    }
+
+    ACCESS_TOKEN=$(get_access_token)
+    {% for secret_var, secret_name in SECRETS.items() %}
+    echo {{ secret_var }}=$(fetch_secret "{{ secret_name }}" "${ACCESS_TOKEN}") >> "${OUTPUT_FILE}"
+    {% endfor %}
+
+    chmod 600 "${OUTPUT_FILE}"
+
+- path: /etc/systemd/system/cloudservice.service
+  permissions: 0644
+  owner: root
+  content: |
+    [Unit]
+    Description=Tilebox Workflow Runner
+    Wants=gcr-online.target
+    After=gcr-online.target
+
+    [Service]
+    Environment="HOME=/home/cloudservice"
+    ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries {{ REGISTRY_HOSTNAME }}
+    ExecStartPre=/bin/bash /tmp/fetch-secrets.sh
+
+    ExecStart=/usr/bin/docker run --rm \
+      {% for key, value in ENVIRONMENT_VARS.items() %}-e {{ key }}="{{ value }}" {% endfor %} \
+      --env-file /tmp/secrets.env \
+      --name %n \
+      {{ CONTAINER_IMAGE }}
+    ExecStop=/usr/bin/docker stop %n
+    ExecStopPost=/usr/bin/docker rm %n
+
+runcmd:
+- systemctl daemon-reload
+- systemctl start cloudservice.service

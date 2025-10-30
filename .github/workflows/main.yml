@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  code-quality:
+    name: Check coding standards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        # Install latest uv version using the installer
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: "Set up Python"
+        # run: uv python install  # this would also work, but the setup-python action can be faster due to caching
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install the project
+        run: uv sync --all-extras --dev
+      - name: Ruff
+        run: uv run ruff format --check . && uv run ruff check .
+      - name: Pyright
+        run: uv run pyright .

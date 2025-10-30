@@ -1,0 +1,17 @@
+.venv/
+
+__pycache__/
+.ipynb_checkpoints/
+
+.idea/
+
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+dist/
+
+coverage.xml
+.coverage*
+test-report.xml
