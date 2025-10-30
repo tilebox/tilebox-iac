@@ -5,10 +5,12 @@ from jinja2 import Environment, FileSystemLoader
 from pulumi import ComponentResource, Input, Output, ResourceOptions
 from pulumi_gcp.compute import (
     InstanceTemplate,
+    Network,
     RegionAutoscaler,
     RegionInstanceGroupManager,
     Router,
     RouterNat,
+    Subnetwork,
 )
 from pulumi_gcp.secretmanager import Secret as GCPSecret
 from typing_extensions import NotRequired
@@ -110,13 +112,29 @@ class AutoScalingGCPCluster(ComponentResource):
             name, gcp_project, roles, opts=ResourceOptions(depends_on=[*list(used_secrets.values())], parent=self)
         )
 
+        network = Network(
+            f"{name}-network",
+            name=f"{name}-network",
+            auto_create_subnetworks=False,
+            opts=ResourceOptions(parent=self),
+        )
+        pga_subnet = Subnetwork(
+            f"{name}-pga-subnet",
+            name=f"{name}-pga-subnet",
+            ip_cidr_range="10.10.0.0/24",
+            network=network.self_link,
+            region=gcp_region,
+            private_ip_google_access=True,  # Private Google Access (PGA) enabled
+            opts=ResourceOptions(depends_on=[network], parent=self),
+        )
+
         # Router and RouterNAT allow VMs to access the internet (outbound)
         router = Router(
             f"{name}-router",
             name=f"{name}-router",
-            network="default",
+            network=network.self_link,
             region=gcp_region,
-            opts=ResourceOptions(parent=self),
+            opts=ResourceOptions(depends_on=[network], parent=self),
         )
         self.router_nat = RouterNat(
             f"{name}-nat",
@@ -160,7 +178,7 @@ class AutoScalingGCPCluster(ComponentResource):
                     "disk_size_gb": 20,
                 },
             ],
-            network_interfaces=[{"network": "default"}],
+            network_interfaces=[{"subnetwork": pga_subnet.self_link}],
             service_account={
                 "email": service_account.email,
                 "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
@@ -173,7 +191,7 @@ class AutoScalingGCPCluster(ComponentResource):
                 "on_host_maintenance": "TERMINATE",
                 "instance_termination_action": "STOP",
             },
-            opts=ResourceOptions(depends_on=[service_account], parent=self),
+            opts=ResourceOptions(depends_on=[service_account, pga_subnet], parent=self),
         )
 
         # Define the Managed Instance Group
