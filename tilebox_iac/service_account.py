@@ -1,6 +1,6 @@
 import re
 from collections.abc import Sequence
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
 from attr import dataclass
 from pulumi import ComponentResource, Output, ResourceOptions
@@ -11,6 +11,7 @@ from pulumi_gcp.projects import IAMMember
 from pulumi_gcp.secretmanager import Secret, SecretIamMember
 from pulumi_gcp.serviceaccount import Account
 from pulumi_gcp.storage import AwaitableGetBucketResult, Bucket, BucketIAMMember
+from typing_extensions import NotRequired
 
 
 @dataclass

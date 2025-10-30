@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, NotRequired, TypedDict
+from typing import Any, TypedDict
 
 from jinja2 import Environment, FileSystemLoader
 from pulumi import ComponentResource, Input, Output, ResourceOptions
@@ -11,6 +11,7 @@ from pulumi_gcp.compute import (
     RouterNat,
 )
 from pulumi_gcp.secretmanager import Secret as GCPSecret
+from typing_extensions import NotRequired
 
 from tilebox_iac.secrets import Secret
 from tilebox_iac.service_account import ServiceAccount, ServiceAccountConfigDict
