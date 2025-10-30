@@ -1,0 +1,71 @@
+[project]
+name = "tilebox_iac"
+version = "0.1.0"
+description = "IaC for a auto-scaling cluster utilizing GCP Spot instances."
+readme = "README.md"
+authors = [{ name = "Tilebox, Inc.", email = "support@tilebox.com" }]
+requires-python = ">=3.11"
+dependencies = [
+    "dirhash>=0.5.0",
+    "jinja2>=3.1.6",
+    "pulumi>=3.186.0",
+    "pulumi-command>=1.1.0",
+    "pulumi-gcp>=8.39.0",
+]
+
+[dependency-groups]
+dev = ["pyright>=1.1.404", "ruff>=0.12.7"]
+
+[tool.ruff]
+# settings applying to all ruff subcommands, such as `ruff check` (lint) and `ruff format`
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["ALL"]
+# all rules: https://docs.astral.sh/ruff/rules/
+ignore = [
+    # some ruff checking modules don't make much sense as a whole
+    "D",   # pydocstyle: pretty strict anyways
+    "FBT", # flake8-boolean-trap: boolean arguments can make sense
+    "COM", # flake8-commas: formatter takes care of this
+    "DTZ", # flake8-datetimez: utc datetimes are useful
+    "DJ",  # flake8-django: not needed
+    "EM",  # flake8-errmsg: str directly in Exception constructor is accetable
+    "TCH", # flake8-type-checking: type checking blocks are weird
+    # specific rules
+    "ANN401",  # any-type: allow Any in *args and **kwargs
+    "S101",    # assert: allow usage of assert
+    "B008",    # function-call-argument-default: some default argument values make sense to be function calls
+    "G004",    # logging-f-string: allow usage of f-strings in logging calls
+    "PLR2004", # magic-value-comparison: sometimes comparison with constants (e.g. 0) makes sense
+    "TRY003",  # raise-vanilla-args: exceptions like this make sense in python
+    "TRY400",  # error-instead-of-exception: logger.error is ok with loguru
+    "S104",    # hardcoded-bind-all-interfaces: we allow binding 0.0.0.0 
+    # disabled because of formatter
+    "E501",   # line-too-long -> formatter takes care of this
+    "ISC001", # single-line-implicit-str-concatenation -> formatter takes care of this
+    "Q",      # flake8-quotes -> formatter takes care of this
+    "W191",   # tab-indentation -> formatter takes care of this
+    # disabled because we allow TODOs in this repo
+    "TD",
+    "FIX",
+]
+
+unfixable = [
+    "F841", # unused-variable -> don't remove them automatically
+    "ERA",  # eradicate -> (commented out code), don't remove it automatically
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tilebox_iac"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/tests/*" = ["INP001", "SLF001"]
+
+[tool.pyright]
+exclude = ["**/.ipynb_checkpoints", "**/__pycache__", ".venv"]
+# pyright needs to have all the dependencies installed to be able to type check
+# we can make sure of this by telling it to use the project venv
+venvPath = "."
+venv = ".venv"
