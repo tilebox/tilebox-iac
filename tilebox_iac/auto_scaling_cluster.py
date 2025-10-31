@@ -75,7 +75,7 @@ class AutoScalingGCPCluster(ComponentResource):
             max_replicas_config: Maximum number of replicas.
             environment_variables: Environment variables to pass to the container.
             roles: Roles to assign to the service account.
-            network: Network to use for the VMs.
+            network_interfaces: List of network interfaces to attach to the VMs.
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:AutoScalingGCPCluster", name, opts=opts)

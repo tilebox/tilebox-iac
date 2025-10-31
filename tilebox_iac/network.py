@@ -13,16 +13,14 @@ class GCPNetwork(ComponentResource):
     ) -> None:
         """A network with optional Private Google Access (PGA) and an optional router for outbound internet access.
 
-        If
-        Private Google Access (PGA) allows VMs to access Google APIs and services using an internal IP address.
-        That way, Cloud services or GCS buckets can be accessed without incurring egress charges.
-
-        If `enable_internet_access` is set to `True`, a router and RouterNAT are created to allow VMs to
-        access the internet (outbound).
-
         Args:
             name: Name of the network.
             gcp_region: The GCP region to deploy the network in.
+            enable_private_google_access: Whether to enable Private Google Access (PGA) for the subnet.
+                Private Google Access (PGA) allows VMs to access Google APIs and services using an internal IP address.
+                That way, Cloud services or GCS buckets can be accessed without incurring egress charges.
+            enable_internet_access: Whether to enable internet access for VMs in the subnet. If `True`, a router and
+                RouterNAT are created to allow VMs to access the internet (outbound).
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:GCPNetwork", name, opts=opts)

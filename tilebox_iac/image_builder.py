@@ -14,6 +14,7 @@ class LocalBuildTrigger(ComponentResource):
         gcp_project: str,
         repository_id: Input[str],
         source_dir: Path,
+        additional_ignore_patterns: list[str] | None = None,
         opts: ResourceOptions | None = None,
     ) -> None:
         """A local build trigger that builds a Docker image on code changes and pushes it to a Google Artifact Registry repository.
@@ -24,13 +25,16 @@ class LocalBuildTrigger(ComponentResource):
             gcp_project: GCP project ID.
             repository_id: ID of the artifact registry repository.
             source_dir: Path to the source directory.
+            additional_ignore_patterns: Additional ignore patterns for excluding files or directories when determining
+                if the source code has changed, and therefore if the image needs to be rebuilt.
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:LocalBuildTrigger", name, opts=opts)
         hostname = f"{gcp_region}-docker.pkg.dev"
 
         # Calculate the hash of the source code to use as an immutable image tag.
-        self.tag = dirhash(source_dir, "sha256", match=["*.py", "*.toml", "Dockerfile", "*.md"], ignore=[".venv/*"])
+        ignore = [".venv/*"] + (additional_ignore_patterns or [])
+        self.tag = dirhash(source_dir, "sha256", match=["*.py", "*.toml", "Dockerfile", "*.md"], ignore=ignore)
 
         def build_config(repo_id: str) -> str:
             # https://cloud.google.com/build/docs/build-config-file-schema
