@@ -3,15 +3,7 @@ from typing import Any, TypedDict
 
 from jinja2 import Environment, FileSystemLoader
 from pulumi import ComponentResource, Input, Output, ResourceOptions
-from pulumi_gcp.compute import (
-    InstanceTemplate,
-    Network,
-    RegionAutoscaler,
-    RegionInstanceGroupManager,
-    Router,
-    RouterNat,
-    Subnetwork,
-)
+from pulumi_gcp.compute import InstanceTemplate, RegionAutoscaler, RegionInstanceGroupManager
 from pulumi_gcp.secretmanager import Secret as GCPSecret
 from typing_extensions import NotRequired
 
@@ -56,6 +48,7 @@ class AutoScalingGCPCluster(ComponentResource):
         max_replicas_config: int,
         environment_variables: dict[str, Input[str] | Secret] | None = None,
         roles: ServiceAccountConfigDict | None = None,
+        network: Input[str] = "default",
         opts: ResourceOptions | None = None,
     ) -> None:
         """An auto-scaling cluster of Spot instances running a Docker container.
@@ -72,6 +65,7 @@ class AutoScalingGCPCluster(ComponentResource):
             max_replicas_config: Maximum number of replicas.
             environment_variables: Environment variables to pass to the container.
             roles: Roles to assign to the service account.
+            network: Network to use for the VMs.
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:AutoScalingGCPCluster", name, opts=opts)
@@ -112,40 +106,6 @@ class AutoScalingGCPCluster(ComponentResource):
             name, gcp_project, roles, opts=ResourceOptions(depends_on=[*list(used_secrets.values())], parent=self)
         )
 
-        network = Network(
-            f"{name}-network",
-            name=f"{name}-network",
-            auto_create_subnetworks=False,
-            opts=ResourceOptions(parent=self),
-        )
-        pga_subnet = Subnetwork(
-            f"{name}-pga-subnet",
-            name=f"{name}-pga-subnet",
-            ip_cidr_range="10.10.0.0/24",
-            network=network.self_link,
-            region=gcp_region,
-            private_ip_google_access=True,  # Private Google Access (PGA) enabled
-            opts=ResourceOptions(depends_on=[network], parent=self),
-        )
-
-        # Router and RouterNAT allow VMs to access the internet (outbound)
-        router = Router(
-            f"{name}-router",
-            name=f"{name}-router",
-            network=network.self_link,
-            region=gcp_region,
-            opts=ResourceOptions(depends_on=[network], parent=self),
-        )
-        self.router_nat = RouterNat(
-            f"{name}-nat",
-            name=f"{name}-nat",
-            router=router.name,
-            region=gcp_region,
-            source_subnetwork_ip_ranges_to_nat="ALL_SUBNETWORKS_ALL_IP_RANGES",
-            nat_ip_allocate_option="AUTO_ONLY",
-            opts=ResourceOptions(depends_on=[router], parent=self),
-        )
-
         secrets = {}
         for secret_name, secret in used_secrets.items():
             # convert secret_name from tilebox-api-key to TILEBOX_API_KEY
@@ -164,7 +124,7 @@ class AutoScalingGCPCluster(ComponentResource):
             machine_type=machine_type,
             metadata={
                 "user-data": cloud_init_config,
-                # Metadata key to enable the Ops Agent for monitoring (including memory) on Container-Optimized OS.
+                # Enable the Ops Agent for monitoring (including memory) on Container-Optimized OS.
                 # https://docs.cloud.google.com/container-optimized-os/docs/how-to/monitoring
                 "google-monitoring-enabled": "true",
                 # https://docs.cloud.google.com/compute/docs/oslogin
@@ -178,7 +138,7 @@ class AutoScalingGCPCluster(ComponentResource):
                     "disk_size_gb": 20,
                 },
             ],
-            network_interfaces=[{"subnetwork": pga_subnet.self_link}],
+            network_interfaces=[{"network": network}],
             service_account={
                 "email": service_account.email,
                 "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
@@ -191,7 +151,7 @@ class AutoScalingGCPCluster(ComponentResource):
                 "on_host_maintenance": "TERMINATE",
                 "instance_termination_action": "STOP",
             },
-            opts=ResourceOptions(depends_on=[service_account, pga_subnet], parent=self),
+            opts=ResourceOptions(depends_on=[service_account], parent=self),
         )
 
         # Define the Managed Instance Group
