@@ -11,7 +11,6 @@ from pulumi_gcp.compute import (
     RegionAutoscaler,
     RegionInstanceGroupManager,
 )
-from pulumi_gcp.secretmanager import Secret as GCPSecret
 from typing_extensions import NotRequired
 
 from tilebox_iac.secrets import Secret
@@ -88,14 +87,14 @@ class AutoScalingGCPCluster(ComponentResource):
         required_roles = {
             "roles/monitoring.metricWriter",  # write metrics to the monitoring console
         }
-        used_secrets: dict[str, GCPSecret] = {}
+        used_secrets: dict[str, Secret] = {}
 
         envs: dict[str, Input[str]] = {}
         if environment_variables is not None:
             for key in sorted(environment_variables):
                 value = environment_variables[key]
                 if isinstance(value, Secret):
-                    used_secrets[value.resource_name] = value.secret
+                    used_secrets[key] = value
                 else:
                     envs[key] = value
 
@@ -106,10 +105,16 @@ class AutoScalingGCPCluster(ComponentResource):
             roles["roles"] = list(required_roles | configured_roles)
 
         secret_roles = list(roles.get("secret_roles", []))
-        for secret_name, secret in used_secrets.items():
-            secret_roles.append(
-                {"secret_slug": secret_name, "secret": secret, "role": "roles/secretmanager.secretAccessor"}
-            )
+        secret_roles.extend(
+            [
+                {
+                    "secret_slug": secret.resource_name,
+                    "secret": secret.secret,
+                    "role": "roles/secretmanager.secretAccessor",
+                }
+                for secret in used_secrets.values()
+            ]
+        )
         roles["secret_roles"] = secret_roles
 
         service_account = ServiceAccount.from_config(
@@ -117,9 +122,8 @@ class AutoScalingGCPCluster(ComponentResource):
         )
 
         secrets = {}
-        for secret_name, secret in used_secrets.items():
-            # convert secret_name from tilebox-api-key to TILEBOX_API_KEY
-            secrets[secret_name.upper().replace("-", "_")] = secret.id
+        for secret_env_var, secret in used_secrets.items():
+            secrets[secret_env_var] = secret.secret.id
 
         cloud_init_config = Output.all(
             image=container["image"],
