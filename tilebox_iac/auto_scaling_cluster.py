@@ -1,9 +1,16 @@
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 
 from jinja2 import Environment, FileSystemLoader
 from pulumi import ComponentResource, Input, Output, ResourceOptions
-from pulumi_gcp.compute import InstanceTemplate, RegionAutoscaler, RegionInstanceGroupManager
+from pulumi_gcp.compute import (
+    InstanceTemplate,
+    InstanceTemplateNetworkInterfaceArgs,
+    InstanceTemplateNetworkInterfaceArgsDict,
+    RegionAutoscaler,
+    RegionInstanceGroupManager,
+)
 from pulumi_gcp.secretmanager import Secret as GCPSecret
 from typing_extensions import NotRequired
 
@@ -48,7 +55,10 @@ class AutoScalingGCPCluster(ComponentResource):
         max_replicas_config: int,
         environment_variables: dict[str, Input[str] | Secret] | None = None,
         roles: ServiceAccountConfigDict | None = None,
-        network: Input[str] = "default",
+        network_interfaces: Input[
+            Sequence[Input[InstanceTemplateNetworkInterfaceArgs | InstanceTemplateNetworkInterfaceArgsDict]]
+        ]
+        | None = None,
         opts: ResourceOptions | None = None,
     ) -> None:
         """An auto-scaling cluster of Spot instances running a Docker container.
@@ -138,7 +148,7 @@ class AutoScalingGCPCluster(ComponentResource):
                     "disk_size_gb": 20,
                 },
             ],
-            network_interfaces=[{"network": network}],
+            network_interfaces=network_interfaces,
             service_account={
                 "email": service_account.email,
                 "scopes": ["https://www.googleapis.com/auth/cloud-platform"],

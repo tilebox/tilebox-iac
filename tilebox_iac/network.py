@@ -69,4 +69,5 @@ class GCPNetwork(ComponentResource):
             )
 
         self.id = self.network.id
-        self.register_outputs({"id": self.id})
+        self.subnet_id = self.subnet.id
+        self.register_outputs({"id": self.id, "subnet_id": self.subnet_id})
