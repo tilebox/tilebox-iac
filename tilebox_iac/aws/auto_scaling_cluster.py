@@ -99,8 +99,7 @@ class AutoScalingAWSCluster(ComponentResource):
 
         secrets_access = list(iam_config_copy.get("secrets_access", []))
         secrets_access.extend(
-            {"secret_slug": secret.resource_name, "secret_arn": secret.arn}
-            for secret in used_secrets.values()
+            {"secret_slug": secret.resource_name, "secret_arn": secret.arn} for secret in used_secrets.values()
         )
         if secrets_access:
             iam_config_copy["secrets_access"] = secrets_access  # type: ignore[typeddict-item]
@@ -209,9 +208,7 @@ class AutoScalingAWSCluster(ComponentResource):
                 ),
             ],
             # Ignore desired_capacity changes to avoid overriding autoscaler decisions on pulumi up
-            opts=ResourceOptions(
-                depends_on=[launch_template], parent=self, ignore_changes=["desired_capacity"]
-            ),
+            opts=ResourceOptions(depends_on=[launch_template], parent=self, ignore_changes=["desired_capacity"]),
         )
 
         if cluster_enabled:

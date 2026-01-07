@@ -131,7 +131,9 @@ class ServiceAccount(ComponentResource):
             secret_roles: Secret specific roles for certain secrets.
             opts: Pulumi resource options.
         """
-        opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:service_account:ServiceAccount")]))
+        opts = ResourceOptions.merge(
+            opts, ResourceOptions(aliases=[Alias(type_="tilebox:service_account:ServiceAccount")])
+        )
         super().__init__("tilebox:gcp:ServiceAccount", name, opts=opts)
 
         self.service_account = Account(
