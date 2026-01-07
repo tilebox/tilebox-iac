@@ -19,7 +19,7 @@ template = env.get_template("cloud-init.yaml")
 def _get_cloud_init(kwargs: dict[str, Any]) -> str:
     """Render the cloud-init config for the AWS VMs."""
     image: str = kwargs["image"]
-    tag: str = kwargs["tag"]
+    tag: str = kwargs["tag"] or "latest"  # Default empty string to "latest"
     environment_variables: dict[str, str] = kwargs["environment_variables"]
     secrets: dict[str, str] = kwargs["secrets"]
     secret_versions: dict[str, str] = kwargs["secret_versions"]
@@ -208,7 +208,10 @@ class AutoScalingAWSCluster(ComponentResource):
                     propagate_at_launch=True,
                 ),
             ],
-            opts=ResourceOptions(depends_on=[launch_template], parent=self),
+            # Ignore desired_capacity changes to avoid overriding autoscaler decisions on pulumi up
+            opts=ResourceOptions(
+                depends_on=[launch_template], parent=self, ignore_changes=["desired_capacity"]
+            ),
         )
 
         if cluster_enabled:
