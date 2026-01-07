@@ -39,7 +39,7 @@ class ContainerConfig(TypedDict):
 
 
 class AutoScalingAWSCluster(ComponentResource):
-    def __init__(  # noqa: PLR0913, PLR0912, C901
+    def __init__(  # noqa: PLR0913
         self,
         name: str,
         container: ContainerConfig,
