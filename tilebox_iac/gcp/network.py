@@ -1,4 +1,4 @@
-from pulumi import ComponentResource, ResourceOptions
+from pulumi import Alias, ComponentResource, ResourceOptions
 from pulumi_gcp.compute import Network, Router, RouterNat, Subnetwork
 
 
@@ -23,6 +23,7 @@ class GCPNetwork(ComponentResource):
                 RouterNAT are created to allow VMs to access the internet (outbound).
             opts: Pulumi resource options.
         """
+        opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:GCPNetwork")]))
         super().__init__("tilebox:gcp:Network", name, opts=opts)
 
         self.network = Network(

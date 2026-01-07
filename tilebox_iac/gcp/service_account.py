@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from typing import TypedDict
 
 from attrs import define
-from pulumi import ComponentResource, Output, ResourceOptions
+from pulumi import Alias, ComponentResource, Output, ResourceOptions
 from pulumi_gcp.artifactregistry import Repository, RepositoryIamMember
 from pulumi_gcp.cloudrun import IamMember as CloudrunServiceIamMember
 from pulumi_gcp.cloudrunv2 import Service
@@ -131,6 +131,7 @@ class ServiceAccount(ComponentResource):
             secret_roles: Secret specific roles for certain secrets.
             opts: Pulumi resource options.
         """
+        opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:service_account:ServiceAccount")]))
         super().__init__("tilebox:gcp:ServiceAccount", name, opts=opts)
 
         self.service_account = Account(

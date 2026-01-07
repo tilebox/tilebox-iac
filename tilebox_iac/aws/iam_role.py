@@ -95,23 +95,31 @@ class IAMRole(ComponentResource):
         self.bucket_policies = []
         for bucket in bucket_access or []:
             actions = _get_s3_actions(bucket["access_level"])
-            policy_document = json.dumps(
-                {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": [a for a in actions if a.startswith("s3:") and a != "s3:ListBucket"],
-                            "Resource": f"{bucket['bucket_arn']}/*",
-                        },
-                        {
-                            "Effect": "Allow",
-                            "Action": "s3:ListBucket",
-                            "Resource": bucket["bucket_arn"],
-                        },
-                    ],
-                }
-            )
+            bucket_arn = bucket["bucket_arn"]
+
+            def make_policy_document(arn: str, actions: list[str] = actions) -> str:
+                return json.dumps(
+                    {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            # Object-level actions require arn/* resource
+                            {
+                                "Effect": "Allow",
+                                "Action": [a for a in actions if a.startswith("s3:") and a != "s3:ListBucket"],
+                                "Resource": f"{arn}/*",
+                            },
+                            # ListBucket requires bucket-level resource (without /*)
+                            {
+                                "Effect": "Allow",
+                                "Action": "s3:ListBucket",
+                                "Resource": arn,
+                            },
+                        ],
+                    }
+                )
+
+            policy_document = Output.from_input(bucket_arn).apply(make_policy_document)
+
             self.bucket_policies.append(
                 iam.RolePolicy(
                     f"{name}-bucket-{bucket['bucket_slug']}",
@@ -123,21 +131,27 @@ class IAMRole(ComponentResource):
 
         self.secret_policies = []
         for secret in secrets_access or []:
-            policy_document = json.dumps(
-                {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "secretsmanager:GetSecretValue",
-                                "secretsmanager:DescribeSecret",
-                            ],
-                            "Resource": secret["secret_arn"],
-                        }
-                    ],
-                }
-            )
+            secret_arn = secret["secret_arn"]
+
+            def make_secret_policy_document(arn: str) -> str:
+                return json.dumps(
+                    {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": [
+                                    "secretsmanager:GetSecretValue",
+                                    "secretsmanager:DescribeSecret",
+                                ],
+                                "Resource": arn,
+                            }
+                        ],
+                    }
+                )
+
+            policy_document = Output.from_input(secret_arn).apply(make_secret_policy_document)
+
             self.secret_policies.append(
                 iam.RolePolicy(
                     f"{name}-secret-{secret['secret_slug']}",

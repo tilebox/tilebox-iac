@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from dirhash import dirhash
-from pulumi import ComponentResource, Input, Output, ResourceOptions
+from pulumi import Alias, ComponentResource, Input, Output, ResourceOptions
 from pulumi_command.local import Command
 
 
@@ -29,6 +29,7 @@ class LocalBuildTrigger(ComponentResource):
                 if the source code has changed, and therefore if the image needs to be rebuilt.
             opts: Pulumi resource options.
         """
+        opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:LocalBuildTrigger")]))
         super().__init__("tilebox:gcp:LocalBuildTrigger", name, opts=opts)
         hostname = f"{gcp_region}-docker.pkg.dev"
 

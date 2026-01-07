@@ -1,4 +1,5 @@
 #cloud-config
+# Secret versions (for change detection): {% for secret_var, version_id in SECRET_VERSIONS.items() %}{{ secret_var }}={{ version_id }} {% endfor %}
 
 packages:
   - docker
@@ -10,10 +11,11 @@ write_files:
   owner: root
   content: |
     #!/bin/bash
-    # Fetch AWS secrets from Secrets Manager using IMDS credentials
+    # Fetch AWS secrets from Secrets Manager using IMDSv2 credentials
     set -euo pipefail
     OUTPUT_FILE="${1:-/tmp/secrets.env}"
-    REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
     {% for secret_var, secret_arn in SECRETS.items() %}
     echo {{ secret_var }}=$(aws secretsmanager get-secret-value --region "${REGION}" --secret-id "{{ secret_arn }}" --query SecretString --output text) >> "${OUTPUT_FILE}"
     {% endfor %}
@@ -33,7 +35,7 @@ write_files:
     Restart=always
     RestartSec=5
     ExecStartPre=/tmp/fetch-secrets.sh /tmp/secrets.env
-    ExecStartPre=/bin/bash -c 'REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region) && aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin {{ REGISTRY_HOSTNAME }}'
+    ExecStartPre=/bin/bash -c 'TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600") && REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region) && aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin {{ REGISTRY_HOSTNAME }}'
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
     ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /tmp/secrets.env {% for key, value in ENVIRONMENT_VARS.items() %}-e {{ key }}={{ value }} {% endfor %}{{ CONTAINER_IMAGE }}
     ExecStop=/usr/bin/docker stop cloudservice

@@ -1,4 +1,4 @@
-from pulumi import ComponentResource, Input, ResourceOptions
+from pulumi import Alias, ComponentResource, Input, ResourceOptions
 from pulumi_gcp.secretmanager import Secret as GCPSecret
 from pulumi_gcp.secretmanager import SecretVersion
 
@@ -19,6 +19,7 @@ class Secret(ComponentResource):
             is_secret_data_base64: Whether the secret data is base64-encoded.
             opts: Pulumi resource options.
         """
+        opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:secrets:Secret")]))
         super().__init__("tilebox:gcp:Secret", name, opts=opts)
 
         self.resource_name = name

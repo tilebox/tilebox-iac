@@ -22,11 +22,13 @@ def _get_cloud_init(kwargs: dict[str, Any]) -> str:
     tag: str = kwargs["tag"]
     environment_variables: dict[str, str] = kwargs["environment_variables"]
     secrets: dict[str, str] = kwargs["secrets"]
+    secret_versions: dict[str, str] = kwargs["secret_versions"]
 
     return template.render(
         CONTAINER_IMAGE=f"{image}:{tag}",
         REGISTRY_HOSTNAME=image.split("/")[0],
         SECRETS=secrets,
+        SECRET_VERSIONS=secret_versions,
         ENVIRONMENT_VARS=environment_variables,
     )
 
@@ -47,7 +49,7 @@ class AutoScalingAWSCluster(ComponentResource):
         min_replicas_config: int,
         max_replicas_config: int,
         subnet_ids: Input[Sequence[Input[str]]],
-        security_group_ids: Input[Sequence[Input[str]]],
+        security_group_ids: Input[Sequence[Input[str]]] | None = None,
         ami_id: Input[str] | None = None,
         environment_variables: dict[str, Input[str] | AWSSecret] | None = None,
         iam_config: IAMRoleConfigDict | None = None,
@@ -64,7 +66,8 @@ class AutoScalingAWSCluster(ComponentResource):
             min_replicas_config: Minimum number of replicas.
             max_replicas_config: Maximum number of replicas.
             subnet_ids: List of subnet IDs to deploy instances in.
-            security_group_ids: List of security group IDs for instances.
+            security_group_ids: Optional list of security group IDs for instances. If omitted, the VPC's
+                default security group is used, which must allow outbound internet access for yum/docker pulls.
             ami_id: AMI ID to use. Defaults to latest Amazon Linux 2023.
             environment_variables: Environment variables to pass to the container.
             iam_config: IAM role configuration for bucket and secret access.
@@ -72,15 +75,11 @@ class AutoScalingAWSCluster(ComponentResource):
         """
         super().__init__("tilebox:aws:AutoScalingCluster", name, opts=opts)
 
-        if container.get("tag") == "":
-            raise ValueError(
-                "Container tag cannot be empty. Leave unset or manually set to `latest` to use the latest tag."
-            )
-
         used_secrets: dict[str, AWSSecret] = {}
         envs: dict[str, Input[str]] = {}
 
         if environment_variables is not None:
+            # Sort keys for deterministic cloud-init output (avoids spurious Pulumi diffs)
             for key in sorted(environment_variables):
                 value = environment_variables[key]
                 if isinstance(value, AWSSecret):
@@ -88,33 +87,44 @@ class AutoScalingAWSCluster(ComponentResource):
                 else:
                     envs[key] = value
 
-        if iam_config is None:
-            iam_config = {}
+        # Copy to avoid mutating caller's config (could cause side effects if reused)
+        iam_config_copy: IAMRoleConfigDict = dict(iam_config) if iam_config else {}  # type: ignore[assignment]
 
-        secrets_access = list(iam_config.get("secrets_access", []))
+        # ECR read access is required for cloud-init to docker pull the container image
+        managed_policies = list(iam_config_copy.get("managed_policies", []))
+        ecr_policy = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+        if ecr_policy not in managed_policies:
+            managed_policies.append(ecr_policy)
+        iam_config_copy["managed_policies"] = managed_policies  # type: ignore[typeddict-item]
+
+        secrets_access = list(iam_config_copy.get("secrets_access", []))
         secrets_access.extend(
             {"secret_slug": secret.resource_name, "secret_arn": secret.arn}
             for secret in used_secrets.values()
         )
         if secrets_access:
-            iam_config["secrets_access"] = secrets_access  # type: ignore[typeddict-item]
+            iam_config_copy["secrets_access"] = secrets_access  # type: ignore[typeddict-item]
 
         iam_role = IAMRole.from_config(
             name,
-            iam_config,
+            iam_config_copy,
             assume_service="ec2.amazonaws.com",
             opts=ResourceOptions(depends_on=[*list(used_secrets.values())], parent=self),
         )
 
         secrets: dict[str, Input[str]] = {}
+        # Include version IDs so secret value changes trigger Launch Template updates
+        secret_versions: dict[str, Input[str]] = {}
         for secret_env_var, secret in used_secrets.items():
             secrets[secret_env_var] = secret.arn
+            secret_versions[secret_env_var] = secret.latest_version
 
         cloud_init_config = Output.all(
             image=container["image"],
             tag=container.get("tag", "latest"),
             environment_variables=envs,
             secrets=secrets,
+            secret_versions=secret_versions,
         ).apply(_get_cloud_init)
 
         user_data = cloud_init_config.apply(lambda c: base64.b64encode(c.encode()).decode())
@@ -139,7 +149,7 @@ class AutoScalingAWSCluster(ComponentResource):
             image_id=resolved_ami_id,
             instance_type=instance_type,
             user_data=user_data,
-            vpc_security_group_ids=security_group_ids,
+            vpc_security_group_ids=security_group_ids if security_group_ids is not None else None,
             iam_instance_profile=aws_ec2.LaunchTemplateIamInstanceProfileArgs(
                 arn=iam_role.instance_profile_arn,
             ),
@@ -150,6 +160,11 @@ class AutoScalingAWSCluster(ComponentResource):
                 ),
             ),
             monitoring=aws_ec2.LaunchTemplateMonitoringArgs(enabled=True),
+            # Enforce IMDSv2 for security (cloud-init script already uses IMDSv2 tokens)
+            metadata_options=aws_ec2.LaunchTemplateMetadataOptionsArgs(
+                http_tokens="required",
+                http_endpoint="enabled",
+            ),
             tag_specifications=[
                 aws_ec2.LaunchTemplateTagSpecificationArgs(
                     resource_type="instance",
@@ -182,7 +197,9 @@ class AutoScalingAWSCluster(ComponentResource):
             health_check_type="EC2",
             health_check_grace_period=300,
             default_instance_warmup=60,
+            # Proactively replace Spot instances when AWS signals upcoming interruption
             capacity_rebalance=True,
+            # Terminate oldest first to ensure instances pick up latest Launch Template changes
             termination_policies=["OldestInstance", "Default"],
             tags=[
                 aws_autoscaling.GroupTagArgs(

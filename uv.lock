@@ -474,6 +474,7 @@ name = "tilebox-iac"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "attrs" },
     { name = "dirhash" },
     { name = "jinja2" },
     { name = "pulumi" },
@@ -490,6 +491,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "attrs", specifier = ">=25.3.0" },
     { name = "dirhash", specifier = ">=0.5.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "pulumi", specifier = ">=3.186.0" },

@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from jinja2 import Environment, FileSystemLoader
-from pulumi import ComponentResource, Input, Output, ResourceOptions
+from pulumi import Alias, ComponentResource, Input, Output, ResourceOptions
 from pulumi_gcp.compute import (
     InstanceTemplate,
     InstanceTemplateNetworkInterfaceArgs,
@@ -77,6 +77,7 @@ class AutoScalingGCPCluster(ComponentResource):
             network_interfaces: List of network interfaces to attach to the VMs.
             opts: Pulumi resource options.
         """
+        opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:AutoScalingGCPCluster")]))
         super().__init__("tilebox:gcp:AutoScalingCluster", name, opts=opts)
 
         if container.get("tag") == "":

@@ -14,6 +14,7 @@ class AWSImageBuilder(ComponentResource):
         repository_name: Input[str],
         source_dir: Path,
         additional_ignore_patterns: list[str] | None = None,
+        platform: str = "linux/amd64",
         opts: ResourceOptions | None = None,
     ) -> None:
         """A local build trigger that builds a Docker image on code changes and pushes it to an AWS ECR repository.
@@ -26,12 +27,19 @@ class AWSImageBuilder(ComponentResource):
             source_dir: Path to the source directory.
             additional_ignore_patterns: Additional ignore patterns for excluding files or directories when determining
                 if the source code has changed, and therefore if the image needs to be rebuilt.
+            platform: Docker platform to build for (e.g., "linux/amd64" or "linux/arm64").
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:aws:ImageBuilder", name, opts=opts)
 
+        # Hash source files to detect changes; tag is used as image tag and Pulumi trigger
         ignore = [".venv/*"] + (additional_ignore_patterns or [])
-        self.tag = dirhash(source_dir, "sha256", match=["*.py", "*.toml", "Dockerfile", "*.md"], ignore=ignore)
+        self.tag = dirhash(
+            source_dir,
+            "sha256",
+            match=["*.py", "*.go", "*.toml", "*.lock", "*.sum", "*.mod", "Dockerfile", "*.md"],
+            ignore=ignore,
+        )
 
         def build_command(args: list[str]) -> str:
             account_id, repo_name = args[0], args[1]
@@ -40,7 +48,7 @@ class AWSImageBuilder(ComponentResource):
 
             return (
                 f"aws ecr get-login-password --region {aws_region} | docker login --username AWS --password-stdin {hostname} && "
-                f"docker build -t {image_uri}:{self.tag} {source_dir} && "
+                f"docker build --platform {platform} --load -t {image_uri}:{self.tag} {source_dir} && "
                 f"docker tag {image_uri}:{self.tag} {image_uri}:latest && "
                 f"docker push {image_uri}:{self.tag} && "
                 f"docker push {image_uri}:latest"
@@ -49,6 +57,7 @@ class AWSImageBuilder(ComponentResource):
         self.docker_build = Command(
             f"{name}-docker-build-image",
             create=Output.all(aws_account_id, repository_name).apply(build_command),
+            # Only rebuild when source hash changes (content-addressable builds)
             triggers=[self.tag],
             opts=ResourceOptions(parent=self),
         )
