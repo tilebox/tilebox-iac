@@ -2,7 +2,7 @@ import re
 from collections.abc import Sequence
 from typing import TypedDict
 
-from attr import dataclass
+from attrs import define
 from pulumi import ComponentResource, Output, ResourceOptions
 from pulumi_gcp.artifactregistry import Repository, RepositoryIamMember
 from pulumi_gcp.cloudrun import IamMember as CloudrunServiceIamMember
@@ -14,7 +14,7 @@ from pulumi_gcp.storage import AwaitableGetBucketResult, Bucket, BucketIAMMember
 from typing_extensions import NotRequired
 
 
-@dataclass
+@define
 class BucketRole:
     bucket_slug: str
     """Slug of the bucket, used as part of the pulumi resource name for the bucket IAM member."""
@@ -32,7 +32,7 @@ class BucketRoleDict(TypedDict):
     role: str
 
 
-@dataclass
+@define
 class ServiceRole:
     service_slug: str
     """Slug of the service, used as part of the pulumi resource name for the bucket IAM member."""
@@ -50,7 +50,7 @@ class ServiceRoleDict(TypedDict):
     role: str
 
 
-@dataclass
+@define
 class RepositoryRole:
     repository_slug: str
     """Slug of the repository, used as part of the pulumi resource name for the repository IAM member."""
@@ -68,7 +68,7 @@ class RepositoryRoleDict(TypedDict):
     role: str
 
 
-@dataclass
+@define
 class SecretRole:
     secret_slug: str
     """Slug of the secret, used as part of the pulumi resource name for the secret IAM member."""
@@ -86,7 +86,7 @@ class SecretRoleDict(TypedDict):
     role: str
 
 
-@dataclass
+@define
 class ServiceAccountConfig:
     """Configuration for a service account and its roles."""
 
@@ -119,11 +119,11 @@ class ServiceAccount(ComponentResource):
         secret_roles: Sequence[SecretRole] | Sequence[SecretRoleDict] | None = None,
         opts: ResourceOptions | None = None,
     ) -> None:
-        """
-        Create a service account with given roles.
+        """Create a service account with given roles.
 
         Args:
             name: Service account name.
+            gcp_project: GCP project ID.
             roles: IAM project roles to assign to the service account.
             bucket_roles: Bucket specific roles for certain buckets.
             service_roles: Service specific roles for certain cloud run services.
@@ -131,7 +131,7 @@ class ServiceAccount(ComponentResource):
             secret_roles: Secret specific roles for certain secrets.
             opts: Pulumi resource options.
         """
-        super().__init__("tilebox:service_account:ServiceAccount", name, opts=opts)
+        super().__init__("tilebox:gcp:ServiceAccount", name, opts=opts)
 
         self.service_account = Account(
             f"{name}-service-account",
@@ -226,7 +226,6 @@ class ServiceAccount(ComponentResource):
         opts: ResourceOptions | None = None,
     ) -> "ServiceAccount":
         """Create a service account from a config."""
-
         if config is None:
             return cls(name, gcp_project, opts=opts)
 
@@ -252,13 +251,7 @@ class ServiceAccount(ComponentResource):
 
 
 def _role_to_slug(role: str) -> str:
-    """Convert a role to a slug.
-
-    >>> _role_to_slug("roles/iam.serviceAccountUser")
-    >>> "iam-service-account-user"
-    """
-
+    """Convert a role to a slug."""
     parts = role.removeprefix("roles/").split(".")
-    # camel case to kebab case
     parts = [re.sub(r"(?<!^)(?=[A-Z])", "-", part).lower() for part in parts]
     return "-".join(parts)

@@ -1,6 +1,6 @@
-from tilebox_iac.auto_scaling_cluster import AutoScalingGCPCluster
-from tilebox_iac.image_builder import LocalBuildTrigger
-from tilebox_iac.network import GCPNetwork
-from tilebox_iac.secrets import Secret
+from tilebox_iac import aws, gcp
 
-__all__ = ["AutoScalingGCPCluster", "GCPNetwork", "LocalBuildTrigger", "Secret"]
+__all__ = [
+    "aws",
+    "gcp",
+]

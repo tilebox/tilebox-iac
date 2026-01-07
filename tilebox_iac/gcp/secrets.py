@@ -19,7 +19,7 @@ class Secret(ComponentResource):
             is_secret_data_base64: Whether the secret data is base64-encoded.
             opts: Pulumi resource options.
         """
-        super().__init__("tilebox:secrets:Secret", name, opts=opts)
+        super().__init__("tilebox:gcp:Secret", name, opts=opts)
 
         self.resource_name = name
         self.secret = GCPSecret(

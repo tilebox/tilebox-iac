@@ -23,7 +23,7 @@ class GCPNetwork(ComponentResource):
                 RouterNAT are created to allow VMs to access the internet (outbound).
             opts: Pulumi resource options.
         """
-        super().__init__("tilebox:GCPNetwork", name, opts=opts)
+        super().__init__("tilebox:gcp:Network", name, opts=opts)
 
         self.network = Network(
             f"{name}-network",
@@ -42,7 +42,6 @@ class GCPNetwork(ComponentResource):
         )
 
         if enable_internet_access:
-            # Router and RouterNAT allow VMs to access the internet (outbound)
             self.router = Router(
                 f"{name}-router",
                 name=f"{name}-router",
