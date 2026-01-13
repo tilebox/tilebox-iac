@@ -1,34 +1,43 @@
 from pulumi import ComponentResource, Input, ResourceOptions
-from pulumi_aws.secretsmanager import Secret as AWSSecretResource
-from pulumi_aws.secretsmanager import SecretVersion as AWSSecretVersion
+from pulumi_aws.secretsmanager import Secret as _Secret
+from pulumi_aws.secretsmanager import SecretVersion
 
 
-class AWSSecret(ComponentResource):
+class Secret(ComponentResource):
     def __init__(
         self,
         name: str,
-        secret_string: Input[str] | None = None,
+        secret_data: Input[str] | None = None,
+        is_secret_data_base64: bool | None = None,
         opts: ResourceOptions | None = None,
     ) -> None:
         """A secret stored in AWS Secrets Manager.
 
         Args:
             name: Secret name.
-            secret_string: The secret value.
+            secret_data: The secret value, in plaintext, or a base64-encoded.
+            is_secret_data_base64: Whether the secret data is base64-encoded.
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:aws:Secret", name, opts=opts)
 
         self.resource_name = name
-        self.secret = AWSSecretResource(
+        self.secret = _Secret(
             name,
             name=name,
             opts=ResourceOptions(parent=self),
         )
-        self.version = AWSSecretVersion(
+
+        secret_kwargs = {}
+        if is_secret_data_base64:
+            secret_kwargs["secret_binary"] = secret_data
+        else:
+            secret_kwargs["secret_string"] = secret_data
+
+        self.version = SecretVersion(
             f"{name}-v1",
             secret_id=self.secret.id,
-            secret_string=secret_string,
+            **secret_kwargs,
             opts=ResourceOptions(depends_on=[self.secret], parent=self),
         )
 

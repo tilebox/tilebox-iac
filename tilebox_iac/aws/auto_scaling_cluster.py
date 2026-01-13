@@ -10,7 +10,7 @@ from pulumi_aws import ec2 as aws_ec2
 from typing_extensions import NotRequired
 
 from tilebox_iac.aws.iam_role import IAMRole, IAMRoleConfigDict
-from tilebox_iac.aws.secrets import AWSSecret
+from tilebox_iac.aws.secrets import Secret
 
 env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
 template = env.get_template("cloud-init.yaml")
@@ -38,7 +38,7 @@ class ContainerConfig(TypedDict):
     tag: NotRequired[Input[str]]
 
 
-class AutoScalingAWSCluster(ComponentResource):
+class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,
@@ -51,7 +51,7 @@ class AutoScalingAWSCluster(ComponentResource):
         subnet_ids: Input[Sequence[Input[str]]],
         security_group_ids: Input[Sequence[Input[str]]] | None = None,
         ami_id: Input[str] | None = None,
-        environment_variables: dict[str, Input[str] | AWSSecret] | None = None,
+        environment_variables: dict[str, Input[str] | Secret] | None = None,
         iam_config: IAMRoleConfigDict | None = None,
         opts: ResourceOptions | None = None,
     ) -> None:
@@ -68,21 +68,21 @@ class AutoScalingAWSCluster(ComponentResource):
             subnet_ids: List of subnet IDs to deploy instances in.
             security_group_ids: Optional list of security group IDs for instances. If omitted, the VPC's
                 default security group is used, which must allow outbound internet access for yum/docker pulls.
-            ami_id: AMI ID to use. Defaults to latest Amazon Linux 2023.
+            ami_id: Amazon Machine Image ID to use. Defaults to latest Amazon Linux 2023.
             environment_variables: Environment variables to pass to the container.
             iam_config: IAM role configuration for bucket and secret access.
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:aws:AutoScalingCluster", name, opts=opts)
 
-        used_secrets: dict[str, AWSSecret] = {}
+        used_secrets: dict[str, Secret] = {}
         envs: dict[str, Input[str]] = {}
 
         if environment_variables is not None:
             # Sort keys for deterministic cloud-init output (avoids spurious Pulumi diffs)
             for key in sorted(environment_variables):
                 value = environment_variables[key]
-                if isinstance(value, AWSSecret):
+                if isinstance(value, Secret):
                     used_secrets[key] = value
                 else:
                     envs[key] = value

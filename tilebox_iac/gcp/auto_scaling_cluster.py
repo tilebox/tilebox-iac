@@ -40,7 +40,7 @@ class ContainerConfig(TypedDict):
     tag: NotRequired[Input[str]]
 
 
-class AutoScalingGCPCluster(ComponentResource):
+class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,

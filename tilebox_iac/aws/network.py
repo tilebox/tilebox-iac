@@ -5,7 +5,7 @@ import pulumi_aws.ec2 as aws_ec2
 from pulumi import ComponentResource, ResourceOptions
 
 
-class AWSNetwork(ComponentResource):
+class Network(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,

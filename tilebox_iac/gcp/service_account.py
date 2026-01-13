@@ -2,7 +2,6 @@ import re
 from collections.abc import Sequence
 from typing import TypedDict
 
-from attrs import define
 from pulumi import Alias, ComponentResource, Output, ResourceOptions
 from pulumi_gcp.artifactregistry import Repository, RepositoryIamMember
 from pulumi_gcp.cloudrun import IamMember as CloudrunServiceIamMember
@@ -14,32 +13,12 @@ from pulumi_gcp.storage import AwaitableGetBucketResult, Bucket, BucketIAMMember
 from typing_extensions import NotRequired
 
 
-@define
-class BucketRole:
-    bucket_slug: str
-    """Slug of the bucket, used as part of the pulumi resource name for the bucket IAM member."""
-    bucket: Bucket | AwaitableGetBucketResult
-    """The bucket to grant the role for."""
-    role: str
-    """Bucket role to grant. e.g. `roles/storage.objectUser`"""
-
-
 class BucketRoleDict(TypedDict):
     """Same as BucketRole, but as a typed dictionary."""
 
     bucket_slug: str
     bucket: Bucket | AwaitableGetBucketResult
     role: str
-
-
-@define
-class ServiceRole:
-    service_slug: str
-    """Slug of the service, used as part of the pulumi resource name for the bucket IAM member."""
-    service: Service
-    """The service to grant the role for."""
-    role: str
-    """Service role to grant. e.g. `roles/run.invoker`"""
 
 
 class ServiceRoleDict(TypedDict):
@@ -50,16 +29,6 @@ class ServiceRoleDict(TypedDict):
     role: str
 
 
-@define
-class RepositoryRole:
-    repository_slug: str
-    """Slug of the repository, used as part of the pulumi resource name for the repository IAM member."""
-    repository: Repository
-    """The repository to grant the role for."""
-    role: str
-    """Repository role to grant. e.g. `roles/artifactregistry.writer`"""
-
-
 class RepositoryRoleDict(TypedDict):
     """Same as RepositoryRole, but as a typed dictionary."""
 
@@ -68,33 +37,12 @@ class RepositoryRoleDict(TypedDict):
     role: str
 
 
-@define
-class SecretRole:
-    secret_slug: str
-    """Slug of the secret, used as part of the pulumi resource name for the secret IAM member."""
-    secret: Secret
-    """The secret to grant the role for."""
-    role: str
-    """Secret role to grant. e.g. `roles/secretmanager.secretAccessor`"""
-
-
 class SecretRoleDict(TypedDict):
     """Same as SecretRole, but as a typed dictionary."""
 
     secret_slug: str
     secret: Secret
     role: str
-
-
-@define
-class ServiceAccountConfig:
-    """Configuration for a service account and its roles."""
-
-    roles: Sequence[str] | None
-    bucket_roles: Sequence[BucketRole] | None
-    service_roles: Sequence[ServiceRole] | None
-    repository_roles: Sequence[RepositoryRole] | None
-    secret_roles: Sequence[SecretRole] | None
 
 
 class ServiceAccountConfigDict(TypedDict):
@@ -113,10 +61,10 @@ class ServiceAccount(ComponentResource):
         name: str,
         gcp_project: str,
         roles: Sequence[str] | None = None,
-        bucket_roles: Sequence[BucketRole] | Sequence[BucketRoleDict] | None = None,
-        service_roles: Sequence[ServiceRole] | Sequence[ServiceRoleDict] | None = None,
-        repository_roles: Sequence[RepositoryRole] | Sequence[RepositoryRoleDict] | None = None,
-        secret_roles: Sequence[SecretRole] | Sequence[SecretRoleDict] | None = None,
+        bucket_roles: Sequence[BucketRoleDict] | None = None,
+        service_roles: Sequence[ServiceRoleDict] | None = None,
+        repository_roles: Sequence[RepositoryRoleDict] | None = None,
+        secret_roles: Sequence[SecretRoleDict] | None = None,
         opts: ResourceOptions | None = None,
     ) -> None:
         """Create a service account with given roles.
@@ -159,12 +107,11 @@ class ServiceAccount(ComponentResource):
 
         self.bucket_roles = []
         for bucket_role in bucket_roles or []:
-            br = bucket_role if isinstance(bucket_role, BucketRole) else BucketRole(**bucket_role)
             self.bucket_roles.append(
                 BucketIAMMember(
-                    f"{name}-bucket-{br.bucket_slug}-role-{_role_to_slug(br.role)}",
-                    bucket=br.bucket.name,
-                    role=br.role,
+                    f"{name}-bucket-{bucket_role['bucket_slug']}-role-{_role_to_slug(bucket_role['role'])}",
+                    bucket=bucket_role["bucket"].name,
+                    role=bucket_role["role"],
                     member=service_account_member,
                     opts=ResourceOptions(depends_on=[self.service_account], parent=self),
                 )
@@ -172,12 +119,11 @@ class ServiceAccount(ComponentResource):
 
         self.service_roles = []
         for service_role in service_roles or []:
-            sr = service_role if isinstance(service_role, ServiceRole) else ServiceRole(**service_role)
             self.service_roles.append(
                 CloudrunServiceIamMember(
-                    f"{name}-service-{sr.service_slug}-role-{_role_to_slug(sr.role)}",
-                    service=sr.service.name,
-                    role=sr.role,
+                    f"{name}-service-{service_role['service_slug']}-role-{_role_to_slug(service_role['role'])}",
+                    service=service_role["service"].name,
+                    role=service_role["role"],
                     member=service_account_member,
                     opts=ResourceOptions(depends_on=[self.service_account], parent=self),
                 )
@@ -185,14 +131,14 @@ class ServiceAccount(ComponentResource):
 
         self.repository_roles = []
         for repository_role in repository_roles or []:
-            rr = repository_role if isinstance(repository_role, RepositoryRole) else RepositoryRole(**repository_role)
+            repository = repository_role["repository"]
             self.repository_roles.append(
                 RepositoryIamMember(
-                    f"{name}-repository-{rr.repository_slug}-role-{_role_to_slug(rr.role)}",
-                    project=rr.repository.project,
-                    location=rr.repository.location,
-                    repository=rr.repository.name,
-                    role=rr.role,
+                    f"{name}-repository-{repository_role['repository_slug']}-role-{_role_to_slug(repository_role['role'])}",
+                    project=repository.project,
+                    location=repository.location,
+                    repository=repository.name,
+                    role=repository_role["role"],
                     member=service_account_member,
                     opts=ResourceOptions(depends_on=[self.service_account], parent=self),
                 )
@@ -200,12 +146,11 @@ class ServiceAccount(ComponentResource):
 
         self.secret_roles = []
         for secret_role in secret_roles or []:
-            sr = secret_role if isinstance(secret_role, SecretRole) else SecretRole(**secret_role)
             self.secret_roles.append(
                 SecretIamMember(
-                    f"{name}-secret-{sr.secret_slug}-role-{_role_to_slug(sr.role)}",
-                    secret_id=sr.secret.id,
-                    role=sr.role,
+                    f"{name}-secret-{secret_role['secret_slug']}-role-{_role_to_slug(secret_role['role'])}",
+                    secret_id=secret_role["secret"].id,
+                    role=secret_role["role"],
                     member=service_account_member,
                     opts=ResourceOptions(depends_on=[self.service_account], parent=self),
                 )
@@ -225,30 +170,21 @@ class ServiceAccount(ComponentResource):
         cls,
         name: str,
         gcp_project: str,
-        config: ServiceAccountConfig | ServiceAccountConfigDict | None,
+        config: ServiceAccountConfigDict | None,
         opts: ResourceOptions | None = None,
     ) -> "ServiceAccount":
         """Create a service account from a config."""
         if config is None:
             return cls(name, gcp_project, opts=opts)
 
-        if not isinstance(config, ServiceAccountConfig):
-            config = ServiceAccountConfig(
-                roles=config.get("roles", None),
-                bucket_roles=[BucketRole(**role) for role in config.get("bucket_roles", [])],
-                service_roles=[ServiceRole(**role) for role in config.get("service_roles", [])],
-                repository_roles=[RepositoryRole(**role) for role in config.get("repository_roles", [])],
-                secret_roles=[SecretRole(**role) for role in config.get("secret_roles", [])],
-            )
-
         return cls(
             name,
             gcp_project=gcp_project,
-            roles=config.roles,
-            bucket_roles=config.bucket_roles,
-            service_roles=config.service_roles,
-            repository_roles=config.repository_roles,
-            secret_roles=config.secret_roles,
+            roles=config.get("roles"),
+            bucket_roles=config.get("bucket_roles"),
+            service_roles=config.get("service_roles"),
+            repository_roles=config.get("repository_roles"),
+            secret_roles=config.get("secret_roles"),
             opts=opts,
         )
 

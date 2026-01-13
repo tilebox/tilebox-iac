@@ -5,7 +5,7 @@ from pulumi import ComponentResource, Input, Output, ResourceOptions
 from pulumi_command.local import Command
 
 
-class AWSImageBuilder(ComponentResource):
+class LocalBuildTrigger(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,

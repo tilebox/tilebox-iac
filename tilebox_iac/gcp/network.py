@@ -1,8 +1,9 @@
 from pulumi import Alias, ComponentResource, ResourceOptions
-from pulumi_gcp.compute import Network, Router, RouterNat, Subnetwork
+from pulumi_gcp.compute import Network as _Network
+from pulumi_gcp.compute import Router, RouterNat, Subnetwork
 
 
-class GCPNetwork(ComponentResource):
+class Network(ComponentResource):
     def __init__(
         self,
         name: str,
@@ -26,7 +27,7 @@ class GCPNetwork(ComponentResource):
         opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:GCPNetwork")]))
         super().__init__("tilebox:gcp:Network", name, opts=opts)
 
-        self.network = Network(
+        self.network = _Network(
             f"{name}-network",
             name=f"{name}-network",
             auto_create_subnetworks=False,

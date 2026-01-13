@@ -15,7 +15,7 @@ class Secret(ComponentResource):
 
         Args:
             name: Secret name.
-            secret_data: Secret data.
+            secret_data: The secret value, in plaintext, or a base64-encoded.
             is_secret_data_base64: Whether the secret data is base64-encoded.
             opts: Pulumi resource options.
         """
