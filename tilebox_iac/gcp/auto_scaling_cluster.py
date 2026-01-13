@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from jinja2 import Environment, FileSystemLoader
-from pulumi import ComponentResource, Input, Output, ResourceOptions
+from pulumi import Alias, ComponentResource, Input, Output, ResourceOptions
 from pulumi_gcp.compute import (
     InstanceTemplate,
     InstanceTemplateNetworkInterfaceArgs,
@@ -13,15 +13,15 @@ from pulumi_gcp.compute import (
 )
 from typing_extensions import NotRequired
 
-from tilebox_iac.secrets import Secret
-from tilebox_iac.service_account import ServiceAccount, ServiceAccountConfigDict
+from tilebox_iac.gcp.secrets import Secret
+from tilebox_iac.gcp.service_account import ServiceAccount, ServiceAccountConfigDict
 
 env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
 template = env.get_template("cloud-init.yaml")
 
 
 def _get_cloud_init(kwargs: dict[str, Any]) -> str:
-    """Render the cloud-init config for the VMs."""
+    """Render the cloud-init config for the GCP VMs."""
     image: str = kwargs["image"]
     tag: str = kwargs["tag"]
     environment_variables: dict[str, str] = kwargs["environment_variables"]
@@ -40,7 +40,7 @@ class ContainerConfig(TypedDict):
     tag: NotRequired[Input[str]]
 
 
-class AutoScalingGCPCluster(ComponentResource):
+class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,
@@ -69,7 +69,7 @@ class AutoScalingGCPCluster(ComponentResource):
             gcp_region: Region to deploy the cluster in.
             machine_type: Machine type to use for the VMs.
             cpu_target: CPU target for autoscaling.
-            cluster_enabled : Whether the cluster is enabled.
+            cluster_enabled: Whether the cluster is enabled.
             min_replicas_config: Minimum number of replicas.
             max_replicas_config: Maximum number of replicas.
             environment_variables: Environment variables to pass to the container.
@@ -77,7 +77,8 @@ class AutoScalingGCPCluster(ComponentResource):
             network_interfaces: List of network interfaces to attach to the VMs.
             opts: Pulumi resource options.
         """
-        super().__init__("tilebox:AutoScalingGCPCluster", name, opts=opts)
+        opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:AutoScalingGCPCluster")]))
+        super().__init__("tilebox:gcp:AutoScalingCluster", name, opts=opts)
 
         if container.get("tag") == "":
             raise ValueError(
@@ -85,7 +86,7 @@ class AutoScalingGCPCluster(ComponentResource):
             )
 
         required_roles = {
-            "roles/monitoring.metricWriter",  # write metrics to the monitoring console
+            "roles/monitoring.metricWriter",
         }
         used_secrets: dict[str, Secret] = {}
 
@@ -132,16 +133,12 @@ class AutoScalingGCPCluster(ComponentResource):
             secrets=secrets,
         ).apply(_get_cloud_init)
 
-        # Define the Instance Template for the MIG
         instance_template = InstanceTemplate(
             f"{name}-template",
             machine_type=machine_type,
             metadata={
                 "user-data": cloud_init_config,
-                # Enable the Ops Agent for monitoring (including memory) on Container-Optimized OS.
-                # https://docs.cloud.google.com/container-optimized-os/docs/how-to/monitoring
                 "google-monitoring-enabled": "true",
-                # https://docs.cloud.google.com/compute/docs/oslogin
                 "enable-oslogin": "TRUE",
             },
             disks=[
@@ -157,7 +154,6 @@ class AutoScalingGCPCluster(ComponentResource):
                 "email": service_account.email,
                 "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
             },
-            # Use Spot VMs for cost savings. The API requires these specific scheduling options.
             scheduling={
                 "provisioning_model": "SPOT",
                 "preemptible": True,
@@ -168,7 +164,6 @@ class AutoScalingGCPCluster(ComponentResource):
             opts=ResourceOptions(depends_on=[service_account], parent=self),
         )
 
-        # Define the Managed Instance Group
         mig = RegionInstanceGroupManager(
             f"{name}-mig",
             base_instance_name=name,
@@ -182,7 +177,6 @@ class AutoScalingGCPCluster(ComponentResource):
             update_policy={
                 "type": "PROACTIVE",
                 "minimal_action": "REPLACE",
-                # Increase surge for faster rollouts
                 "max_surge_fixed": 10,
                 "max_unavailable_fixed": 0,
             },
@@ -190,18 +184,12 @@ class AutoScalingGCPCluster(ComponentResource):
         )
 
         if cluster_enabled:
-            # If the cluster is enabled, the autoscaler is ON and controls the size.
-            # The MIG's target_size is not set, ceding control to the autoscaler,
-            # which will scale up to min_replicas immediately.
             min_replicas = min_replicas_config
             max_replicas = max_replicas_config
         else:
-            # If the cluster is disabled, the autoscaler is turned OFF.
-            # The MIG's target_size is explicitly set to 0 to shut down all instances.
             min_replicas = 0
             max_replicas = 0
 
-        # Define the Autoscaler for the MIG
         self.autoscaler = RegionAutoscaler(
             f"{name}-autoscaler",
             target=mig.self_link,

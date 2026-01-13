@@ -1,0 +1,49 @@
+from pulumi import Alias, ComponentResource, Input, ResourceOptions
+from pulumi_gcp.secretmanager import Secret as GCPSecret
+from pulumi_gcp.secretmanager import SecretVersion
+
+
+class Secret(ComponentResource):
+    def __init__(
+        self,
+        name: str,
+        secret_data: Input[str] | None = None,
+        is_secret_data_base64: bool | None = None,
+        opts: ResourceOptions | None = None,
+    ) -> None:
+        """A secret stored in GCP Secret Manager.
+
+        Args:
+            name: Secret name.
+            secret_data: The secret value, in plaintext, or a base64-encoded.
+            is_secret_data_base64: Whether the secret data is base64-encoded.
+            opts: Pulumi resource options.
+        """
+        opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:secrets:Secret")]))
+        super().__init__("tilebox:gcp:Secret", name, opts=opts)
+
+        self.resource_name = name
+        self.secret = GCPSecret(
+            name,
+            secret_id=name,
+            replication={"auto": {}},
+            opts=ResourceOptions(parent=self),
+        )
+        self.version = SecretVersion(
+            f"{name}-v1",
+            secret=self.secret.id,
+            secret_data=secret_data,
+            is_secret_data_base64=is_secret_data_base64,
+            opts=ResourceOptions(depends_on=[self.secret], parent=self),
+        )
+
+        self.id = self.secret.secret_id
+        self.name = self.secret.name
+        self.latest_version = self.version.name
+        self.register_outputs(
+            {
+                "id": self.id,
+                "name": self.name,
+                "latest_version": self.version.name,
+            }
+        )

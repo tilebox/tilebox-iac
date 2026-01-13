@@ -1,6 +1,6 @@
 from pulumi import ComponentResource, Input, ResourceOptions
-from pulumi_gcp.secretmanager import Secret as GCPSecret
-from pulumi_gcp.secretmanager import SecretVersion
+from pulumi_aws.secretsmanager import Secret as _Secret
+from pulumi_aws.secretsmanager import SecretVersion
 
 
 class Secret(ComponentResource):
@@ -11,38 +11,46 @@ class Secret(ComponentResource):
         is_secret_data_base64: bool | None = None,
         opts: ResourceOptions | None = None,
     ) -> None:
-        """A secret stored in GCP Secret Manager.
+        """A secret stored in AWS Secrets Manager.
 
         Args:
             name: Secret name.
-            secret_data: Secret data.
+            secret_data: The secret value, in plaintext, or a base64-encoded.
             is_secret_data_base64: Whether the secret data is base64-encoded.
             opts: Pulumi resource options.
         """
-        super().__init__("tilebox:secrets:Secret", name, opts=opts)
+        super().__init__("tilebox:aws:Secret", name, opts=opts)
 
         self.resource_name = name
-        self.secret = GCPSecret(
+        self.secret = _Secret(
             name,
-            secret_id=name,
-            replication={"auto": {}},
+            name=name,
             opts=ResourceOptions(parent=self),
         )
+
+        secret_kwargs = {}
+        if is_secret_data_base64:
+            secret_kwargs["secret_binary"] = secret_data
+        else:
+            secret_kwargs["secret_string"] = secret_data
+
         self.version = SecretVersion(
             f"{name}-v1",
-            secret=self.secret.id,
-            secret_data=secret_data,
-            is_secret_data_base64=is_secret_data_base64,
+            secret_id=self.secret.id,
+            **secret_kwargs,
             opts=ResourceOptions(depends_on=[self.secret], parent=self),
         )
 
-        self.id = self.secret.secret_id
+        self.id = self.secret.id
+        self.arn = self.secret.arn
+        self.secret_arn = self.secret.arn
         self.name = self.secret.name
-        self.latest_version = self.version.name
+        self.latest_version = self.version.version_id
         self.register_outputs(
             {
                 "id": self.id,
+                "arn": self.arn,
                 "name": self.name,
-                "latest_version": self.version.name,
+                "latest_version": self.latest_version,
             }
         )
