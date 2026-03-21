@@ -12,6 +12,8 @@ write_files:
     set -euo pipefail
 
     OUTPUT_FILE="${1:-/tmp/secrets.env}"
+    # Always create a fresh env file so the service can start even when no secrets are configured.
+    : > "${OUTPUT_FILE}"
 
     # Get access token from metadata server
     get_access_token() {
@@ -31,10 +33,12 @@ write_files:
             | base64 -d
     }
 
+    {% if SECRETS %}
     ACCESS_TOKEN=$(get_access_token)
     {% for secret_var, secret_name in SECRETS.items() %}
-    echo {{ secret_var }}=$(fetch_secret "{{ secret_name }}" "${ACCESS_TOKEN}") >> "${OUTPUT_FILE}"
+    printf '%s=%s\n' "{{ secret_var }}" "$(fetch_secret "{{ secret_name }}" "${ACCESS_TOKEN}")" >> "${OUTPUT_FILE}"
     {% endfor %}
+    {% endif %}
 
     chmod 600 "${OUTPUT_FILE}"
 
@@ -48,17 +52,21 @@ write_files:
     After=gcr-online.target
 
     [Service]
+    Type=simple
+    Restart=always
+    RestartSec=5
     Environment="HOME=/home/cloudservice"
     ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries {{ REGISTRY_HOSTNAME }}
     ExecStartPre=/bin/bash /tmp/fetch-secrets.sh
+    ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
 
     ExecStart=/usr/bin/docker run --rm \
       {% for key, value in ENVIRONMENT_VARS.items() %}-e {{ key }}="{{ value }}" {% endfor %} \
       --env-file /tmp/secrets.env \
       --name %n \
       {{ CONTAINER_IMAGE }}
-    ExecStop=/usr/bin/docker stop %n
-    ExecStopPost=/usr/bin/docker rm %n
+    ExecStop=-/usr/bin/docker stop %n
+    ExecStopPost=-/usr/bin/docker rm %n
 
 runcmd:
 - systemctl daemon-reload
