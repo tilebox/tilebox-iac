@@ -26,7 +26,7 @@ def _get_cloud_init(kwargs: dict[str, Any]) -> str:
 
     return template.render(
         CONTAINER_IMAGE=f"{image}:{tag}",
-        REGISTRY_HOSTNAME=image.split("/")[0],
+        REGISTRY_HOSTNAME=image.split("/", maxsplit=1)[0],
         SECRETS=secrets,
         SECRET_VERSIONS=secret_versions,
         ENVIRONMENT_VARS=environment_variables,
@@ -200,6 +200,14 @@ class AutoScalingCluster(ComponentResource):
             capacity_rebalance=True,
             # Terminate oldest first to ensure instances pick up latest Launch Template changes
             termination_policies=["OldestInstance", "Default"],
+            # Automatically roll instances when Launch Template changes (image/env/user-data updates).
+            instance_refresh=aws_autoscaling.GroupInstanceRefreshArgs(
+                strategy="Rolling",
+                preferences=aws_autoscaling.GroupInstanceRefreshPreferencesArgs(
+                    min_healthy_percentage=0,
+                    instance_warmup="60",
+                ),
+            ),
             tags=[
                 aws_autoscaling.GroupTagArgs(
                     key="Name",
