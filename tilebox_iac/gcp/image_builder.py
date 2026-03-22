@@ -34,7 +34,9 @@ class LocalBuildTrigger(ComponentResource):
         hostname = f"{gcp_region}-docker.pkg.dev"
 
         ignore = [".venv/*"] + (additional_ignore_patterns or [])
-        self.tag = dirhash(source_dir, "sha256", match=["*.py", "*.toml", "Dockerfile", "*.md"], ignore=ignore)
+        # Include all files so extensionless runtime binaries (for example `dynamic_runner/tilebox`)
+        # trigger rebuilds reliably.
+        self.tag = dirhash(source_dir, "sha256", match=["*", "**/*"], ignore=ignore)
 
         def build_config(repo_id: str) -> str:
             build_config = {

@@ -34,10 +34,12 @@ class LocalBuildTrigger(ComponentResource):
 
         # Hash source files to detect changes; tag is used as image tag and Pulumi trigger
         ignore = [".venv/*"] + (additional_ignore_patterns or [])
+        # Include all files so extensionless runtime binaries (for example `dynamic_runner/tilebox`)
+        # trigger rebuilds reliably.
         self.tag = dirhash(
             source_dir,
             "sha256",
-            match=["*.py", "*.go", "*.toml", "*.lock", "*.sum", "*.mod", "Dockerfile", "*.md"],
+            match=["*", "**/*"],
             ignore=ignore,
         )
 
