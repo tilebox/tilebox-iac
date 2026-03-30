@@ -15,6 +15,7 @@ class LocalBuildTrigger(ComponentResource):
         repository_id: Input[str],
         source_dir: Path,
         additional_ignore_patterns: list[str] | None = None,
+        platform: str = "linux/amd64",
         opts: ResourceOptions | None = None,
     ) -> None:
         """A local build trigger that builds a Docker image on code changes and pushes it to a Google Artifact Registry repository.
@@ -27,6 +28,7 @@ class LocalBuildTrigger(ComponentResource):
             source_dir: Path to the source directory.
             additional_ignore_patterns: Additional ignore patterns for excluding files or directories when determining
                 if the source code has changed, and therefore if the image needs to be rebuilt.
+            platform: Docker platform to build for (e.g., "linux/amd64" or "linux/arm64").
             opts: Pulumi resource options.
         """
         opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:LocalBuildTrigger")]))
@@ -58,6 +60,8 @@ class LocalBuildTrigger(ComponentResource):
                         "env": ["DOCKER_BUILDKIT=1"],
                         "args": [
                             "build",
+                            "--platform",
+                            platform,
                             "-t",
                             f"{hostname}/{gcp_project}/{repo_id}/{name}:{self.tag}",
                             "--cache-from",
