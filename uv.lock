@@ -7,6 +7,10 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 
+[options]
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "arpeggio"
 version = "2.0.3"
@@ -461,6 +465,21 @@ wheels = [
 ]
 
 [[package]]
+name = "pulumi-azure-native"
+version = "3.18.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "parver" },
+    { name = "pulumi" },
+    { name = "semver" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ff/70/c5ccbdcf0a1240ae85420354c258a6c2ecad2290eab515b7a5721247a2a2/pulumi_azure_native-3.18.0.tar.gz", hash = "sha256:7cc31cf8e3f790a5544bf0bde772681ffdd8a84fc79d11ca4440e20a6197a7be", size = 12688725, upload-time = "2026-05-09T15:36:46.973Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/c5/808429be3067a47914e182c8e7738ea9aaee8638bc51a58991f586992d41/pulumi_azure_native-3.18.0-py3-none-any.whl", hash = "sha256:0e7af4e73d1ccf39125a66cd47eca72c8a13f0636e1b6091d5e3a5655d475ccc", size = 21361802, upload-time = "2026-05-09T15:36:43.383Z" },
+]
+
+[[package]]
 name = "pulumi-command"
 version = "1.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -623,6 +642,7 @@ dependencies = [
     { name = "jinja2" },
     { name = "pulumi" },
     { name = "pulumi-aws" },
+    { name = "pulumi-azure-native" },
     { name = "pulumi-command" },
     { name = "pulumi-gcp" },
 ]
@@ -639,6 +659,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "pulumi", specifier = ">=3.186.0" },
     { name = "pulumi-aws", specifier = ">=6.60.0" },
+    { name = "pulumi-azure-native", specifier = ">=2.74.0" },
     { name = "pulumi-command", specifier = ">=1.1.0" },
     { name = "pulumi-gcp", specifier = ">=8.39.0" },
 ]

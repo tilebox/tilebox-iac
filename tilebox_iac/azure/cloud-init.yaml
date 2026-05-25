@@ -1,0 +1,76 @@
+#cloud-config
+
+packages:
+  - docker.io
+  - jq
+
+write_files:
+- path: /tmp/fetch-secrets.sh
+  permissions: '0755'
+  owner: root
+  content: |
+    #!/bin/bash
+    # Fetch Azure Key Vault secrets using the VM's managed identity.
+    set -euo pipefail
+
+    OUTPUT_FILE="${1:-/tmp/secrets.env}"
+    : > "${OUTPUT_FILE}"
+
+    get_access_token() {
+        curl -s -H "Metadata: true" \
+            "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net{% if CLIENT_ID %}&client_id={{ CLIENT_ID }}{% endif %}" \
+            | jq -r ".access_token"
+    }
+
+    fetch_secret() {
+        local secret_url="$1"
+        local access_token="$2"
+
+        curl -s -H "Authorization: Bearer ${access_token}" \
+            "${secret_url}?api-version=7.4" \
+            | jq -r ".value"
+    }
+
+    {% if SECRETS %}
+    ACCESS_TOKEN=$(get_access_token)
+    {% for secret_var, secret_url in SECRETS.items() %}
+    printf '%s=%s\n' "{{ secret_var }}" "$(fetch_secret "{{ secret_url }}" "${ACCESS_TOKEN}")" >> "${OUTPUT_FILE}"
+    {% endfor %}
+    {% endif %}
+
+    chmod 600 "${OUTPUT_FILE}"
+
+- path: /etc/systemd/system/cloudservice.service
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Tilebox Workflow Runner
+    After=docker.service network-online.target
+    Wants=network-online.target
+    Requires=docker.service
+
+    [Service]
+    Type=simple
+    Restart=always
+    RestartSec=5
+    ExecStartPre=/bin/bash /tmp/fetch-secrets.sh /tmp/secrets.env
+    {% if REGISTRY_HOSTNAME.endswith('.azurecr.io') %}
+    ExecStartPre=/bin/bash -c 'TOKEN=$(curl -s -H "Metadata: true" "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fmanagement.azure.com%2F{% if CLIENT_ID %}&client_id={{ CLIENT_ID }}{% endif %}" | jq -r ".access_token") && docker login {{ REGISTRY_HOSTNAME }} --username 00000000-0000-0000-0000-000000000000 --password-stdin <<< "$${TOKEN}"'
+    {% endif %}
+    {% if REGISTRY_HOSTNAME.endswith('.pkg.dev') %}
+    ExecStartPre=/bin/bash -c 'set -euo pipefail; . /tmp/secrets.env; printf "%%s" "$${TILEBOX_GCP_CREDENTIALS_BASE64}" | base64 -d | docker login {{ REGISTRY_HOSTNAME }} --username _json_key --password-stdin'
+    {% endif %}
+    ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
+    ExecStart=/usr/bin/docker run --rm --name cloudservice {% if ENVIRONMENT_VARS.get('TILEBOX_ENABLE_NVIDIA_GPU') == 'true' %}--gpus all {% endif %}--env-file /tmp/secrets.env {% for key, value in ENVIRONMENT_VARS.items() %}-e {{ key }}="{{ value }}" {% endfor %}{{ CONTAINER_IMAGE }}
+    ExecStop=-/usr/bin/docker stop cloudservice
+
+    [Install]
+    WantedBy=multi-user.target
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable docker.service
+  - systemctl start docker.service
+  - systemctl enable cloudservice.service
+  - systemctl start cloudservice.service
