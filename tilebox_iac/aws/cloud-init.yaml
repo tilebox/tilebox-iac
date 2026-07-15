@@ -14,6 +14,7 @@ write_files:
     # Fetch AWS secrets from Secrets Manager using IMDSv2 credentials
     set -euo pipefail
     OUTPUT_FILE="${1:-/tmp/secrets.env}"
+    : > "${OUTPUT_FILE}"
     TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
     REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
     {% for secret_var, secret_arn in SECRETS.items() %}
@@ -21,6 +22,42 @@ write_files:
     printf '%s=%s\n' "{{ secret_var }}" "${SECRET_VALUE}" >> "${OUTPUT_FILE}"
     {% endfor %}
     chmod 600 "${OUTPUT_FILE}"
+
+- path: /usr/local/bin/cloudservice-health
+  permissions: '0755'
+  owner: root
+  content: |
+    #!/bin/bash
+    set -euo pipefail
+
+    FAILURE_FILE=/run/cloudservice-health-failures
+    if [ "$(docker inspect --format '{% raw %}{{.State.Running}}{% endraw %}' cloudservice 2>/dev/null || true)" = "true" ]; then
+        rm -f "${FAILURE_FILE}"
+        exit 0
+    fi
+
+    failures=$(cat "${FAILURE_FILE}" 2>/dev/null || echo 0)
+    failures=$((failures + 1))
+    printf '%s\n' "${failures}" > "${FAILURE_FILE}"
+    if [ "${failures}" -lt 10 ]; then
+        exit 0
+    fi
+
+    # Use IMDSv2 to identify this instance before asking its ASG to replace it.
+    TOKEN=$(curl --fail --silent --show-error -X PUT \
+        "http://169.254.169.254/latest/api/token" \
+        -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+    INSTANCE_ID=$(curl --fail --silent --show-error \
+        -H "X-aws-ec2-metadata-token: ${TOKEN}" \
+        http://169.254.169.254/latest/meta-data/instance-id)
+    REGION=$(curl --fail --silent --show-error \
+        -H "X-aws-ec2-metadata-token: ${TOKEN}" \
+        http://169.254.169.254/latest/meta-data/placement/region)
+    aws autoscaling set-instance-health \
+        --region "${REGION}" \
+        --instance-id "${INSTANCE_ID}" \
+        --health-status Unhealthy \
+        --should-respect-grace-period
 
 - path: /etc/systemd/system/cloudservice.service
   permissions: '0644'
@@ -36,7 +73,6 @@ write_files:
     Restart=always
     RestartSec=5
     ExecStartPre=/tmp/fetch-secrets.sh /tmp/secrets.env
-    ExecStartPre=/bin/bash -c 'TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600") && REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region) && aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin {{ REGISTRY_HOSTNAME }}'
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
     ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /tmp/secrets.env {% for key, value in ENVIRONMENT_VARS.items() %}-e {{ key }}={{ value }} {% endfor %}{{ CONTAINER_IMAGE }}
     ExecStop=/usr/bin/docker stop cloudservice
@@ -44,9 +80,37 @@ write_files:
     [Install]
     WantedBy=multi-user.target
 
+- path: /etc/systemd/system/cloudservice-health.service
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Check Tilebox Workflow Runner Health
+    After=cloudservice.service
+
+    [Service]
+    Type=oneshot
+    ExecStart=/usr/local/bin/cloudservice-health
+
+- path: /etc/systemd/system/cloudservice-health.timer
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Periodically Check Tilebox Workflow Runner Health
+
+    [Timer]
+    OnBootSec=5min
+    OnUnitActiveSec=1min
+
+    [Install]
+    WantedBy=timers.target
+
 runcmd:
   - systemctl daemon-reload
   - systemctl enable docker.service
   - systemctl start docker.service
   - systemctl enable cloudservice.service
   - systemctl start cloudservice.service
+  - systemctl enable cloudservice-health.timer
+  - systemctl start cloudservice-health.timer

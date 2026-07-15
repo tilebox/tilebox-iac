@@ -1,18 +1,17 @@
 [project]
 name = "tilebox_iac"
 version = "0.1.0"
-description = "IaC for auto-scaling clusters utilizing GCP and AWS Spot instances."
+description = "Pulumi components for auto-scaling Tilebox release runner clusters on AWS, Azure, and GCP."
 readme = "README.md"
 authors = [{ name = "Tilebox, Inc.", email = "support@tilebox.com" }]
 requires-python = ">=3.10"
 dependencies = [
-    "dirhash>=0.5.0",
     "jinja2>=3.1.6",
     "pulumi>=3.186.0",
     "pulumi-aws>=6.60.0",
-    "pulumi-azure-native>=2.74.0",
-    "pulumi-command>=1.1.0",
+    "pulumi-azure-native>=3.0.0",
     "pulumi-gcp>=8.39.0",
+    "typing-extensions>=4.0",
 ]
 
 [dependency-groups]

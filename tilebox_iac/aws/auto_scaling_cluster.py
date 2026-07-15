@@ -1,16 +1,19 @@
 import base64
+import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
+import pulumi_aws as aws
 from jinja2 import Environment, FileSystemLoader
 from pulumi import ComponentResource, Input, Output, ResourceOptions
 from pulumi_aws import autoscaling as aws_autoscaling
 from pulumi_aws import ec2 as aws_ec2
-from typing_extensions import NotRequired
+from pulumi_aws import iam as aws_iam
 
 from tilebox_iac.aws.iam_role import IAMRole, IAMRoleConfigDict
 from tilebox_iac.aws.secrets import Secret
+from tilebox_iac.release_runner import RUNNER_IMAGE
 
 env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
 template = env.get_template("cloud-init.yaml")
@@ -18,31 +21,22 @@ template = env.get_template("cloud-init.yaml")
 
 def _get_cloud_init(kwargs: dict[str, Any]) -> str:
     """Render the cloud-init config for the AWS VMs."""
-    image: str = kwargs["image"]
-    tag: str = kwargs["tag"] or "latest"  # Default empty string to "latest"
     environment_variables: dict[str, str] = kwargs["environment_variables"]
     secrets: dict[str, str] = kwargs["secrets"]
     secret_versions: dict[str, str] = kwargs["secret_versions"]
 
     return template.render(
-        CONTAINER_IMAGE=f"{image}:{tag}",
-        REGISTRY_HOSTNAME=image.split("/", maxsplit=1)[0],
+        CONTAINER_IMAGE=RUNNER_IMAGE,
         SECRETS=secrets,
         SECRET_VERSIONS=secret_versions,
         ENVIRONMENT_VARS=environment_variables,
     )
 
 
-class ContainerConfig(TypedDict):
-    image: Input[str]
-    tag: NotRequired[Input[str]]
-
-
 class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,
-        container: ContainerConfig,
         instance_type: str,
         cpu_target: float,
         cluster_enabled: bool,
@@ -59,7 +53,6 @@ class AutoScalingCluster(ComponentResource):
 
         Args:
             name: Name of the cluster.
-            container: Container image to run (ECR image URL).
             instance_type: EC2 instance type to use.
             cpu_target: CPU target for autoscaling (0.0 to 1.0).
             cluster_enabled: Whether the cluster is enabled.
@@ -90,13 +83,6 @@ class AutoScalingCluster(ComponentResource):
         # Copy to avoid mutating caller's config (could cause side effects if reused)
         iam_config_copy: IAMRoleConfigDict = dict(iam_config) if iam_config else {}  # type: ignore[assignment]
 
-        # ECR read access is required for cloud-init to docker pull the container image
-        managed_policies = list(iam_config_copy.get("managed_policies", []))
-        ecr_policy = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-        if ecr_policy not in managed_policies:
-            managed_policies.append(ecr_policy)
-        iam_config_copy["managed_policies"] = managed_policies  # type: ignore[typeddict-item]
-
         secrets_access = list(iam_config_copy.get("secrets_access", []))
         secrets_access.extend(
             {"secret_slug": secret.resource_name, "secret_arn": secret.arn} for secret in used_secrets.values()
@@ -111,6 +97,36 @@ class AutoScalingCluster(ComponentResource):
             opts=ResourceOptions(depends_on=[*list(used_secrets.values())], parent=self),
         )
 
+        asg_arn = Output.all(
+            partition=aws.get_partition_output().partition,
+            region=aws.get_region_output().name,
+            account_id=aws.get_caller_identity_output().account_id,
+        ).apply(
+            lambda values: (
+                f"arn:{values['partition']}:autoscaling:{values['region']}:{values['account_id']}:"
+                f"autoScalingGroup:*:autoScalingGroupName/{name}-*"
+            )
+        )
+        health_policy = aws_iam.RolePolicy(
+            f"{name}-set-instance-health",
+            role=iam_role.role.name,
+            policy=asg_arn.apply(
+                lambda arn: json.dumps(
+                    {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": "autoscaling:SetInstanceHealth",
+                                "Resource": arn,
+                            }
+                        ],
+                    }
+                )
+            ),
+            opts=ResourceOptions(parent=self),
+        )
+
         secrets: dict[str, Input[str]] = {}
         # Include version IDs so secret value changes trigger Launch Template updates
         secret_versions: dict[str, Input[str]] = {}
@@ -119,8 +135,6 @@ class AutoScalingCluster(ComponentResource):
             secret_versions[secret_env_var] = secret.latest_version
 
         cloud_init_config = Output.all(
-            image=container["image"],
-            tag=container.get("tag", "latest"),
             environment_variables=envs,
             secrets=secrets,
             secret_versions=secret_versions,
@@ -170,7 +184,7 @@ class AutoScalingCluster(ComponentResource):
                     tags={"Name": f"{name}-instance"},
                 ),
             ],
-            opts=ResourceOptions(depends_on=[iam_role], parent=self),
+            opts=ResourceOptions(depends_on=[iam_role, health_policy], parent=self),
         )
 
         if cluster_enabled:

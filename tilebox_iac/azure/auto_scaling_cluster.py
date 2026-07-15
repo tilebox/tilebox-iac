@@ -1,45 +1,36 @@
 import base64
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 from pulumi import ComponentResource, Input, Output, ResourceOptions
 from pulumi_azure_native import compute, monitor
-from typing_extensions import NotRequired
 
 from tilebox_iac.azure.identity import ManagedIdentity, ManagedIdentityConfigDict
 from tilebox_iac.azure.secrets import Secret
+from tilebox_iac.release_runner import RUNNER_IMAGE
 
 env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
 template = env.get_template("cloud-init.yaml")
 
 
 def _get_cloud_init(kwargs: dict[str, Any]) -> str:
-    image: str = kwargs["image"]
-    tag: str = kwargs["tag"] or "latest"
     environment_variables: dict[str, str] = kwargs["environment_variables"]
     secrets: dict[str, str] = kwargs["secrets"]
     client_id: str = kwargs["client_id"]
 
     return template.render(
-        CONTAINER_IMAGE=f"{image}:{tag}",
-        REGISTRY_HOSTNAME=image.split("/", maxsplit=1)[0],
+        CONTAINER_IMAGE=RUNNER_IMAGE,
         SECRETS=secrets,
         ENVIRONMENT_VARS=environment_variables,
         CLIENT_ID=client_id,
     )
 
 
-class ContainerConfig(TypedDict):
-    image: Input[str]
-    tag: NotRequired[Input[str]]
-
-
 class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,
-        container: ContainerConfig,
         resource_group_name: Input[str],
         location: Input[str],
         vm_size: str,
@@ -83,8 +74,6 @@ class AutoScalingCluster(ComponentResource):
             secrets[secret_env_var] = secret.secret_uri
 
         cloud_init_config = Output.all(
-            image=container["image"],
-            tag=container.get("tag", "latest"),
             environment_variables=envs,
             secrets=secrets,
             client_id=managed_identity.client_id,
@@ -101,6 +90,7 @@ class AutoScalingCluster(ComponentResource):
 
         capacity = min_replicas_config if cluster_enabled else 0
         max_capacity = max_replicas_config if cluster_enabled else 0
+        ignore_changes = ["sku.capacity"] if cluster_enabled else []
 
         self.vmss = compute.VirtualMachineScaleSet(
             f"{name}-vmss",
@@ -110,7 +100,11 @@ class AutoScalingCluster(ComponentResource):
             sku={"name": vm_size, "tier": "Standard", "capacity": capacity},
             overprovision=False,
             upgrade_policy=compute.UpgradePolicyArgs(
-                mode=compute.UpgradeMode.MANUAL,
+                mode=compute.UpgradeMode.ROLLING,
+                rolling_upgrade_policy=compute.RollingUpgradePolicyArgs(
+                    # New VMs rerun cloud-init; quota fallback does not.
+                    max_surge=True,
+                ),
             ),
             identity=compute.VirtualMachineScaleSetIdentityArgs(
                 type=compute.ResourceIdentityType.USER_ASSIGNED,
@@ -118,8 +112,25 @@ class AutoScalingCluster(ComponentResource):
             ),
             virtual_machine_profile=compute.VirtualMachineScaleSetVMProfileArgs(
                 priority="Spot" if use_spot else None,
-                eviction_policy="Deallocate" if use_spot else None,
+                eviction_policy="Delete" if use_spot else None,
                 billing_profile=compute.BillingProfileArgs(max_price=-1) if use_spot else None,
+                extension_profile=compute.VirtualMachineScaleSetExtensionProfileArgs(
+                    extensions=[
+                        compute.VirtualMachineScaleSetExtensionArgs(
+                            name="runner-health",
+                            publisher="Microsoft.ManagedServices",
+                            type="ApplicationHealthLinux",
+                            type_handler_version="2.0",
+                            auto_upgrade_minor_version=True,
+                            settings={
+                                "protocol": "http",
+                                "port": 8080,
+                                "requestPath": "/health",
+                                "gracePeriod": 900,
+                            },
+                        )
+                    ]
+                ),
                 storage_profile=compute.VirtualMachineScaleSetStorageProfileArgs(
                     image_reference=source_image_reference,
                     os_disk=compute.VirtualMachineScaleSetOSDiskArgs(
@@ -163,7 +174,7 @@ class AutoScalingCluster(ComponentResource):
                     ]
                 ),
             ),
-            opts=ResourceOptions(depends_on=[managed_identity], parent=self, ignore_changes=["sku.capacity"]),
+            opts=ResourceOptions(depends_on=[managed_identity], parent=self, ignore_changes=ignore_changes),
         )
 
         if cluster_enabled:

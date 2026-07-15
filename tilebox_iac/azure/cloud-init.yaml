@@ -40,6 +40,51 @@ write_files:
 
     chmod 600 "${OUTPUT_FILE}"
 
+- path: /usr/local/bin/cloudservice-health
+  permissions: '0755'
+  owner: root
+  content: |
+    #!/usr/bin/env python3
+    import json
+    import subprocess
+    import time
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    def runner_is_running():
+        try:
+            result = subprocess.run(
+                ["docker", "inspect", "--format", "{% raw %}{{.State.Running}}{% endraw %}", "cloudservice"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return result.returncode == 0 and result.stdout.strip() == "true"
+
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path != "/health":
+                self.send_error(404)
+                return
+
+            state = "Healthy" if runner_is_running() else "Unhealthy"
+            response = json.dumps({"ApplicationHealthState": state}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        def log_message(self, format, *args):
+            pass
+
+    while not runner_is_running():
+        time.sleep(5)
+
+    HTTPServer(("127.0.0.1", 8080), HealthHandler).serve_forever()
+
 - path: /etc/systemd/system/cloudservice.service
   permissions: '0644'
   owner: root
@@ -55,15 +100,27 @@ write_files:
     Restart=always
     RestartSec=5
     ExecStartPre=/bin/bash /tmp/fetch-secrets.sh /tmp/secrets.env
-    {% if REGISTRY_HOSTNAME.endswith('.azurecr.io') %}
-    ExecStartPre=/bin/bash -c 'TOKEN=$(curl -s -H "Metadata: true" "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fmanagement.azure.com%2F{% if CLIENT_ID %}&client_id={{ CLIENT_ID }}{% endif %}" | jq -r ".access_token") && docker login {{ REGISTRY_HOSTNAME }} --username 00000000-0000-0000-0000-000000000000 --password-stdin <<< "$${TOKEN}"'
-    {% endif %}
-    {% if REGISTRY_HOSTNAME.endswith('.pkg.dev') %}
-    ExecStartPre=/bin/bash -c 'set -euo pipefail; . /tmp/secrets.env; printf "%%s" "$${TILEBOX_GCP_CREDENTIALS_BASE64}" | base64 -d | docker login {{ REGISTRY_HOSTNAME }} --username _json_key --password-stdin'
-    {% endif %}
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
     ExecStart=/usr/bin/docker run --rm --name cloudservice {% if ENVIRONMENT_VARS.get('TILEBOX_ENABLE_NVIDIA_GPU') == 'true' %}--gpus all {% endif %}--env-file /tmp/secrets.env {% for key, value in ENVIRONMENT_VARS.items() %}-e {{ key }}="{{ value }}" {% endfor %}{{ CONTAINER_IMAGE }}
     ExecStop=-/usr/bin/docker stop cloudservice
+
+    [Install]
+    WantedBy=multi-user.target
+
+- path: /etc/systemd/system/cloudservice-health.service
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Tilebox Workflow Runner Health Endpoint
+    After=docker.service
+    Requires=docker.service
+
+    [Service]
+    Type=simple
+    Restart=always
+    RestartSec=5
+    ExecStart=/usr/local/bin/cloudservice-health
 
     [Install]
     WantedBy=multi-user.target
@@ -74,3 +131,5 @@ runcmd:
   - systemctl start docker.service
   - systemctl enable cloudservice.service
   - systemctl start cloudservice.service
+  - systemctl enable cloudservice-health.service
+  - systemctl start cloudservice-health.service

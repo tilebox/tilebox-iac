@@ -42,6 +42,17 @@ write_files:
 
     chmod 600 "${OUTPUT_FILE}"
 
+- path: /etc/cloudservice-health
+  permissions: 0755
+  owner: root
+  content: |
+    #!/bin/bash
+    if [ "$(docker inspect --format '{% raw %}{{.State.Running}}{% endraw %}' cloudservice.service 2>/dev/null || true)" = "true" ]; then
+        printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    else
+        printf 'HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    fi
+
 - path: /etc/systemd/system/cloudservice.service
   permissions: 0644
   owner: root
@@ -56,7 +67,6 @@ write_files:
     Restart=always
     RestartSec=5
     Environment="HOME=/home/cloudservice"
-    ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries {{ REGISTRY_HOSTNAME }}
     ExecStartPre=/bin/bash /tmp/fetch-secrets.sh
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
 
@@ -68,6 +78,29 @@ write_files:
     ExecStop=-/usr/bin/docker stop %n
     ExecStopPost=-/usr/bin/docker rm %n
 
+    [Install]
+    WantedBy=multi-user.target
+
+- path: /etc/systemd/system/cloudservice-health.service
+  permissions: 0644
+  owner: root
+  content: |
+    [Unit]
+    Description=Tilebox Workflow Runner Health Endpoint
+    After=docker.service
+
+    [Service]
+    Type=simple
+    Restart=always
+    RestartSec=5
+    ExecStart=/usr/bin/socat TCP-LISTEN:8080,reuseaddr,fork EXEC:/etc/cloudservice-health
+
+    [Install]
+    WantedBy=multi-user.target
+
 runcmd:
 - systemctl daemon-reload
+- systemctl enable cloudservice.service
 - systemctl start cloudservice.service
+- systemctl enable cloudservice-health.service
+- systemctl start cloudservice-health.service

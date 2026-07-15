@@ -1,20 +1,22 @@
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 from pulumi import Alias, ComponentResource, Input, Output, ResourceOptions
 from pulumi_gcp.compute import (
+    Firewall,
     InstanceTemplate,
     InstanceTemplateNetworkInterfaceArgs,
     InstanceTemplateNetworkInterfaceArgsDict,
     RegionAutoscaler,
+    RegionHealthCheck,
     RegionInstanceGroupManager,
 )
-from typing_extensions import NotRequired
 
 from tilebox_iac.gcp.secrets import Secret
 from tilebox_iac.gcp.service_account import ServiceAccount, ServiceAccountConfigDict
+from tilebox_iac.release_runner import RUNNER_IMAGE
 
 env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
 template = env.get_template("cloud-init.yaml")
@@ -22,29 +24,36 @@ template = env.get_template("cloud-init.yaml")
 
 def _get_cloud_init(kwargs: dict[str, Any]) -> str:
     """Render the cloud-init config for the GCP VMs."""
-    image: str = kwargs["image"]
-    tag: str = kwargs["tag"]
     environment_variables: dict[str, str] = kwargs["environment_variables"]
     secrets: dict[str, str] = kwargs["secrets"]
 
     return template.render(
-        CONTAINER_IMAGE=f"{image}:{tag}",
-        REGISTRY_HOSTNAME=image.split("/")[0],
+        CONTAINER_IMAGE=RUNNER_IMAGE,
         SECRETS=secrets,
         ENVIRONMENT_VARS=environment_variables,
     )
 
 
-class ContainerConfig(TypedDict):
-    image: Input[str]
-    tag: NotRequired[Input[str]]
+def _get_health_check_network(network_interfaces: Any) -> str:
+    if not network_interfaces:
+        return "default"
+
+    first_interface = network_interfaces[0]
+    network = (
+        first_interface.get("network")
+        if isinstance(first_interface, dict)
+        else getattr(first_interface, "network", None)
+    )
+    if not network:
+        msg = "network_interfaces[0].network is required for GCP runner health checks"
+        raise ValueError(msg)
+    return str(network)
 
 
 class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,
-        container: ContainerConfig,
         gcp_project: str,
         gcp_region: str,
         machine_type: str,
@@ -64,7 +73,6 @@ class AutoScalingCluster(ComponentResource):
 
         Args:
             name: Name of the cluster.
-            container: Container image to run.
             gcp_project: GCP project ID to deploy the cluster in.
             gcp_region: Region to deploy the cluster in.
             machine_type: Machine type to use for the VMs.
@@ -74,16 +82,12 @@ class AutoScalingCluster(ComponentResource):
             max_replicas_config: Maximum number of replicas.
             environment_variables: Environment variables to pass to the container.
             roles: Roles to assign to the service account.
-            network_interfaces: List of network interfaces to attach to the VMs.
+            network_interfaces: List of network interfaces to attach to the VMs. The first interface must include its
+                network so the runner health-check firewall can target it.
             opts: Pulumi resource options.
         """
         opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:AutoScalingGCPCluster")]))
         super().__init__("tilebox:gcp:AutoScalingCluster", name, opts=opts)
-
-        if container.get("tag") == "":
-            raise ValueError(
-                "Container tag cannot be empty. Leave unset or manually set to `latest` to use the latest tag."
-            )
 
         required_roles = {
             "roles/monitoring.metricWriter",
@@ -122,13 +126,40 @@ class AutoScalingCluster(ComponentResource):
             name, gcp_project, roles, opts=ResourceOptions(depends_on=[*list(used_secrets.values())], parent=self)
         )
 
+        health_check = RegionHealthCheck(
+            f"{name}-health-check",
+            name=f"{name}-health-check",
+            project=gcp_project,
+            region=gcp_region,
+            check_interval_sec=30,
+            timeout_sec=5,
+            healthy_threshold=1,
+            unhealthy_threshold=3,
+            http_health_check={
+                "port": 8080,
+                "request_path": "/health",
+            },
+            opts=ResourceOptions(parent=self),
+        )
+        health_check_network = Output.from_input(network_interfaces).apply(_get_health_check_network)
+        health_check_firewall = Firewall(
+            f"{name}-health-check",
+            name=f"{name}-health-check",
+            project=gcp_project,
+            network=health_check_network,
+            direction="INGRESS",
+            # Google Cloud health-check probe ranges.
+            source_ranges=["130.211.0.0/22", "35.191.0.0/16"],
+            target_service_accounts=[service_account.email],
+            allows=[{"protocol": "tcp", "ports": ["8080"]}],
+            opts=ResourceOptions(depends_on=[service_account], parent=self),
+        )
+
         secrets = {}
         for secret_env_var, secret in used_secrets.items():
             secrets[secret_env_var] = secret.secret.id
 
         cloud_init_config = Output.all(
-            image=container["image"],
-            tag=container.get("tag", "latest"),
             environment_variables=envs,
             secrets=secrets,
         ).apply(_get_cloud_init)
@@ -180,7 +211,14 @@ class AutoScalingCluster(ComponentResource):
                 "max_surge_fixed": 10,
                 "max_unavailable_fixed": 0,
             },
-            opts=ResourceOptions(depends_on=[instance_template], parent=self),
+            auto_healing_policies={
+                "health_check": health_check.id,
+                "initial_delay_sec": 900,
+            },
+            opts=ResourceOptions(
+                depends_on=[instance_template, health_check, health_check_firewall],
+                parent=self,
+            ),
         )
 
         if cluster_enabled:
