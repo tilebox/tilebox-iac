@@ -52,6 +52,7 @@ class AutoScalingCluster(ComponentResource):
         environment_variables: dict[str, Input[str] | Secret] | None = None,
         iam_config: IAMRoleConfigDict | None = None,
         runner_image: Input[str] = RUNNER_IMAGE,
+        root_volume_size_gb: int = 40,
         opts: ResourceOptions | None = None,
     ) -> None:
         """An auto-scaling cluster of AWS Spot instances running a Docker container.
@@ -72,6 +73,7 @@ class AutoScalingCluster(ComponentResource):
             iam_config: IAM role configuration for bucket and secret access.
             runner_image: Runner container image. Defaults to the official Tilebox runner. Private ECR images require
                 ECR read permissions in iam_config.
+            root_volume_size_gb: Root EBS volume size in GiB. Defaults to 40 GiB.
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:aws:AutoScalingCluster", name, opts=opts)
@@ -144,6 +146,16 @@ class AutoScalingCluster(ComponentResource):
             image_id=resolved_ami_id,
             instance_type=instance_type,
             user_data=user_data,
+            block_device_mappings=[
+                aws_ec2.LaunchTemplateBlockDeviceMappingArgs(
+                    device_name="/dev/xvda",
+                    ebs=aws_ec2.LaunchTemplateBlockDeviceMappingEbsArgs(
+                        delete_on_termination="true",
+                        volume_size=root_volume_size_gb,
+                        volume_type="gp3",
+                    ),
+                )
+            ],
             vpc_security_group_ids=security_group_ids if security_group_ids is not None else None,
             iam_instance_profile=aws_ec2.LaunchTemplateIamInstanceProfileArgs(
                 arn=iam_role.instance_profile_arn,
