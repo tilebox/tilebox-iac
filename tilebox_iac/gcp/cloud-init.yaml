@@ -2,13 +2,13 @@
 
 write_files:
 - path: /tmp/environment.env
-  permissions: 0600
+  permissions: '0600'
   owner: root
   encoding: b64
   content: "{{ ENVIRONMENT_FILE }}"
 
 - path: /tmp/fetch-secrets.sh
-  permissions: 0755
+  permissions: '0755'
   owner: root
   content: |
     #!/bin/bash
@@ -53,8 +53,25 @@ write_files:
 
     chmod 600 "${OUTPUT_FILE}"
 
+- path: /etc/cloudservice-health
+  permissions: '0755'
+  owner: root
+  content: |
+    #!/bin/bash
+    set -euo pipefail
+
+    while IFS= read -r line; do
+        [[ "${line}" == $'\r' || -z "${line}" ]] && break
+    done
+
+    if [ "$(docker inspect --format '{% raw %}{{.State.Running}}{% endraw %}' cloudservice.service 2>/dev/null || true)" = "true" ]; then
+        printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    else
+        printf 'HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    fi
+
 - path: /etc/systemd/system/cloudservice.service
-  permissions: 0644
+  permissions: '0644'
   owner: root
   content: |
     [Unit]
@@ -86,6 +103,40 @@ write_files:
     ExecStop=-/usr/bin/docker stop %n
     ExecStopPost=-/usr/bin/docker rm %n
 
+- path: /etc/systemd/system/cloudservice-health.socket
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Tilebox Workflow Runner Health Socket
+
+    [Socket]
+    ListenStream=8080
+    Accept=yes
+
+    [Install]
+    WantedBy=sockets.target
+
+- path: /etc/systemd/system/cloudservice-health@.service
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Serve Tilebox Workflow Runner Health
+    After=docker.service
+    Requires=docker.service
+
+    [Service]
+    Type=oneshot
+    TimeoutStartSec=5s
+    ExecStart=/etc/cloudservice-health
+    StandardInput=socket
+    StandardOutput=socket
+
 runcmd:
+# Allow Google Cloud health-check probes through the COS host firewall.
+- /sbin/iptables -A INPUT -s 130.211.0.0/22 -p tcp --dport 8080 -j ACCEPT
+- /sbin/iptables -A INPUT -s 35.191.0.0/16 -p tcp --dport 8080 -j ACCEPT
 - systemctl daemon-reload
 - systemctl start cloudservice.service
+- systemctl start cloudservice-health.socket

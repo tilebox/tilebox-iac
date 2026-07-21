@@ -88,6 +88,7 @@ class ServiceAccount(ComponentResource):
             f"{name}-service-account",
             account_id=name,
             display_name=f"Tilebox {name} Service Account",
+            project=gcp_project,
             opts=ResourceOptions(parent=self),
         )
 

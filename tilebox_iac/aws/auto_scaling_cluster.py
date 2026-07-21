@@ -1,12 +1,15 @@
 import base64
+import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import pulumi_aws as aws
 from jinja2 import Environment, FileSystemLoader
-from pulumi import ComponentResource, Input, Output, ResourceOptions
+from pulumi import ComponentResource, Input, InvokeOptions, InvokeOutputOptions, Output, ResourceOptions
 from pulumi_aws import autoscaling as aws_autoscaling
 from pulumi_aws import ec2 as aws_ec2
+from pulumi_aws import iam as aws_iam
 
 from tilebox_iac.aws.iam_role import IAMRole, IAMRoleConfigDict
 from tilebox_iac.aws.secrets import Secret
@@ -111,6 +114,37 @@ class AutoScalingCluster(ComponentResource):
             opts=ResourceOptions(depends_on=[*list(used_secrets.values())], parent=self),
         )
 
+        invoke_opts = InvokeOutputOptions(parent=self)
+        asg_arn = Output.all(
+            partition=aws.get_partition_output(opts=invoke_opts).partition,
+            region=aws.get_region_output(opts=invoke_opts).name,
+            account_id=aws.get_caller_identity_output(opts=invoke_opts).account_id,
+        ).apply(
+            lambda values: (
+                f"arn:{values['partition']}:autoscaling:{values['region']}:{values['account_id']}:"
+                f"autoScalingGroup:*:autoScalingGroupName/{name}-*"
+            )
+        )
+        health_policy = aws_iam.RolePolicy(
+            f"{name}-set-instance-health",
+            role=iam_role.role.name,
+            policy=asg_arn.apply(
+                lambda arn: json.dumps(
+                    {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": "autoscaling:SetInstanceHealth",
+                                "Resource": arn,
+                            }
+                        ],
+                    }
+                )
+            ),
+            opts=ResourceOptions(parent=self),
+        )
+
         secrets: dict[str, Input[str]] = {}
         # Include version IDs so secret value changes trigger Launch Template updates
         secret_versions: dict[str, Input[str]] = {}
@@ -138,6 +172,7 @@ class AutoScalingCluster(ComponentResource):
                     aws_ec2.GetAmiFilterArgs(name="name", values=["al2023-ami-*-x86_64"]),
                     aws_ec2.GetAmiFilterArgs(name="virtualization-type", values=["hvm"]),
                 ],
+                opts=InvokeOptions(parent=self),
             )
             resolved_ami_id = ami.id
 
@@ -179,7 +214,7 @@ class AutoScalingCluster(ComponentResource):
                     tags={"Name": f"{name}-instance"},
                 ),
             ],
-            opts=ResourceOptions(depends_on=[iam_role], parent=self),
+            opts=ResourceOptions(depends_on=[iam_role, health_policy], parent=self),
         )
 
         if cluster_enabled:
