@@ -176,7 +176,7 @@ class AutoScalingCluster(ComponentResource):
             vpc_zone_identifiers=subnet_ids,
             launch_template=aws_autoscaling.GroupLaunchTemplateArgs(
                 id=launch_template.id,
-                version="$Latest",
+                version=launch_template.latest_version.apply(str),
             ),
             health_check_type="EC2",
             health_check_grace_period=300,
