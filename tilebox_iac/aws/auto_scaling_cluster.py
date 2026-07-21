@@ -67,7 +67,8 @@ class AutoScalingCluster(ComponentResource):
             security_group_ids: Optional list of security group IDs for instances. If omitted, the VPC's
                 default security group is used, which must allow outbound internet access for yum/docker pulls.
             ami_id: Amazon Machine Image ID to use. Defaults to latest Amazon Linux 2023.
-            environment_variables: Environment variables to pass to the container.
+            environment_variables: Environment variables to pass to the runner. TILEBOX_API_KEY is required;
+                TILEBOX_CLUSTER is optional and defaults to the account's default cluster.
             iam_config: IAM role configuration for bucket and secret access.
             runner_image: Runner container image. Defaults to the official Tilebox runner. Private ECR images require
                 ECR read permissions in iam_config.
