@@ -19,12 +19,18 @@ template = env.get_template("cloud-init.yaml")
 
 def _get_cloud_init(kwargs: dict[str, Any]) -> str:
     """Render the cloud-init config for the AWS VMs."""
+    runner_image: str = kwargs["runner_image"]
+    registry_hostname = runner_image.split("/", maxsplit=1)[0]
+    registry_parts = registry_hostname.split(".")
+    ecr_region = registry_parts[3] if len(registry_parts) > 3 and registry_parts[1:3] == ["dkr", "ecr"] else None
     environment_variables: dict[str, str] = kwargs["environment_variables"]
     secrets: dict[str, str] = kwargs["secrets"]
     secret_versions: dict[str, str] = kwargs["secret_versions"]
 
     return template.render(
-        CONTAINER_IMAGE=RUNNER_IMAGE,
+        CONTAINER_IMAGE=runner_image,
+        ECR_REGION=ecr_region,
+        REGISTRY_HOSTNAME=registry_hostname,
         SECRETS=secrets,
         SECRET_VERSIONS=secret_versions,
         ENVIRONMENT_VARS=environment_variables,
@@ -45,6 +51,7 @@ class AutoScalingCluster(ComponentResource):
         ami_id: Input[str] | None = None,
         environment_variables: dict[str, Input[str] | Secret] | None = None,
         iam_config: IAMRoleConfigDict | None = None,
+        runner_image: Input[str] = RUNNER_IMAGE,
         opts: ResourceOptions | None = None,
     ) -> None:
         """An auto-scaling cluster of AWS Spot instances running a Docker container.
@@ -62,6 +69,8 @@ class AutoScalingCluster(ComponentResource):
             ami_id: Amazon Machine Image ID to use. Defaults to latest Amazon Linux 2023.
             environment_variables: Environment variables to pass to the container.
             iam_config: IAM role configuration for bucket and secret access.
+            runner_image: Runner container image. Defaults to the official Tilebox runner. Private ECR images require
+                ECR read permissions in iam_config.
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:aws:AutoScalingCluster", name, opts=opts)
@@ -106,6 +115,7 @@ class AutoScalingCluster(ComponentResource):
             secret_versions[secret_env_var] = secret.latest_version
 
         cloud_init_config = Output.all(
+            runner_image=runner_image,
             environment_variables=envs,
             secrets=secrets,
             secret_versions=secret_versions,

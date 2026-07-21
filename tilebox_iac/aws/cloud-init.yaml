@@ -37,6 +37,9 @@ write_files:
     Restart=always
     RestartSec=5
     ExecStartPre=/tmp/fetch-secrets.sh /tmp/secrets.env
+    {% if ECR_REGION %}
+    ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region {{ ECR_REGION }} | docker login --username AWS --password-stdin {{ REGISTRY_HOSTNAME }}'
+    {% endif %}
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
     ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /tmp/secrets.env {% for key, value in ENVIRONMENT_VARS.items() %}-e {{ key }}={{ value }} {% endfor %}{{ CONTAINER_IMAGE }}
     ExecStop=/usr/bin/docker stop cloudservice
