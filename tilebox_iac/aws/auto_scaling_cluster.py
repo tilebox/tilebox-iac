@@ -1,48 +1,46 @@
 import base64
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 from pulumi import ComponentResource, Input, Output, ResourceOptions
 from pulumi_aws import autoscaling as aws_autoscaling
 from pulumi_aws import ec2 as aws_ec2
-from typing_extensions import NotRequired
 
 from tilebox_iac.aws.iam_role import IAMRole, IAMRoleConfigDict
 from tilebox_iac.aws.secrets import Secret
+from tilebox_iac.release_runner import RUNNER_IMAGE
 
-env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
+# This template renders cloud-init YAML rather than HTML.
+env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=False)  # noqa: S701
 template = env.get_template("cloud-init.yaml")
 
 
 def _get_cloud_init(kwargs: dict[str, Any]) -> str:
     """Render the cloud-init config for the AWS VMs."""
-    image: str = kwargs["image"]
-    tag: str = kwargs["tag"] or "latest"  # Default empty string to "latest"
+    runner_image: str = kwargs["runner_image"]
+    registry_hostname = runner_image.split("/", maxsplit=1)[0]
+    registry_parts = registry_hostname.split(".")
+    ecr_region = registry_parts[3] if len(registry_parts) > 3 and registry_parts[1:3] == ["dkr", "ecr"] else None
     environment_variables: dict[str, str] = kwargs["environment_variables"]
     secrets: dict[str, str] = kwargs["secrets"]
     secret_versions: dict[str, str] = kwargs["secret_versions"]
 
     return template.render(
-        CONTAINER_IMAGE=f"{image}:{tag}",
-        REGISTRY_HOSTNAME=image.split("/", maxsplit=1)[0],
+        CONTAINER_IMAGE=runner_image,
+        ECR_REGION=ecr_region,
+        REGISTRY_HOSTNAME=registry_hostname,
         SECRETS=secrets,
         SECRET_VERSIONS=secret_versions,
         ENVIRONMENT_VARS=environment_variables,
     )
 
 
-class ContainerConfig(TypedDict):
-    image: Input[str]
-    tag: NotRequired[Input[str]]
-
-
 class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,
-        container: ContainerConfig,
         instance_type: str,
         cpu_target: float,
         cluster_enabled: bool,
@@ -53,13 +51,14 @@ class AutoScalingCluster(ComponentResource):
         ami_id: Input[str] | None = None,
         environment_variables: dict[str, Input[str] | Secret] | None = None,
         iam_config: IAMRoleConfigDict | None = None,
+        runner_image: Input[str] = RUNNER_IMAGE,
+        root_volume_size_gb: int = 40,
         opts: ResourceOptions | None = None,
     ) -> None:
         """An auto-scaling cluster of AWS Spot instances running a Docker container.
 
         Args:
             name: Name of the cluster.
-            container: Container image to run (ECR image URL).
             instance_type: EC2 instance type to use.
             cpu_target: CPU target for autoscaling (0.0 to 1.0).
             cluster_enabled: Whether the cluster is enabled.
@@ -69,11 +68,18 @@ class AutoScalingCluster(ComponentResource):
             security_group_ids: Optional list of security group IDs for instances. If omitted, the VPC's
                 default security group is used, which must allow outbound internet access for yum/docker pulls.
             ami_id: Amazon Machine Image ID to use. Defaults to latest Amazon Linux 2023.
-            environment_variables: Environment variables to pass to the container.
+            environment_variables: Environment variables to pass to the runner. TILEBOX_API_KEY is required;
+                TILEBOX_CLUSTER is optional and defaults to the account's default cluster.
             iam_config: IAM role configuration for bucket and secret access.
+            runner_image: Runner container image. Defaults to the official Tilebox runner. Private ECR images require
+                ECR read permissions in iam_config.
+            root_volume_size_gb: Root EBS volume size in GiB. Defaults to 40 GiB.
             opts: Pulumi resource options.
         """
         super().__init__("tilebox:aws:AutoScalingCluster", name, opts=opts)
+
+        if environment_variables is None or "TILEBOX_API_KEY" not in environment_variables:
+            raise ValueError("environment_variables must include TILEBOX_API_KEY")
 
         used_secrets: dict[str, Secret] = {}
         envs: dict[str, Input[str]] = {}
@@ -89,13 +95,6 @@ class AutoScalingCluster(ComponentResource):
 
         # Copy to avoid mutating caller's config (could cause side effects if reused)
         iam_config_copy: IAMRoleConfigDict = dict(iam_config) if iam_config else {}  # type: ignore[assignment]
-
-        # ECR read access is required for cloud-init to docker pull the container image
-        managed_policies = list(iam_config_copy.get("managed_policies", []))
-        ecr_policy = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-        if ecr_policy not in managed_policies:
-            managed_policies.append(ecr_policy)
-        iam_config_copy["managed_policies"] = managed_policies  # type: ignore[typeddict-item]
 
         secrets_access = list(iam_config_copy.get("secrets_access", []))
         secrets_access.extend(
@@ -119,8 +118,7 @@ class AutoScalingCluster(ComponentResource):
             secret_versions[secret_env_var] = secret.latest_version
 
         cloud_init_config = Output.all(
-            image=container["image"],
-            tag=container.get("tag", "latest"),
+            runner_image=runner_image,
             environment_variables=envs,
             secrets=secrets,
             secret_versions=secret_versions,
@@ -148,6 +146,16 @@ class AutoScalingCluster(ComponentResource):
             image_id=resolved_ami_id,
             instance_type=instance_type,
             user_data=user_data,
+            block_device_mappings=[
+                aws_ec2.LaunchTemplateBlockDeviceMappingArgs(
+                    device_name="/dev/xvda",
+                    ebs=aws_ec2.LaunchTemplateBlockDeviceMappingEbsArgs(
+                        delete_on_termination="true",
+                        volume_size=root_volume_size_gb,
+                        volume_type="gp3",
+                    ),
+                )
+            ],
             vpc_security_group_ids=security_group_ids if security_group_ids is not None else None,
             iam_instance_profile=aws_ec2.LaunchTemplateIamInstanceProfileArgs(
                 arn=iam_role.instance_profile_arn,
@@ -191,7 +199,7 @@ class AutoScalingCluster(ComponentResource):
             vpc_zone_identifiers=subnet_ids,
             launch_template=aws_autoscaling.GroupLaunchTemplateArgs(
                 id=launch_template.id,
-                version="$Latest",
+                version=launch_template.latest_version.apply(str),
             ),
             health_check_type="EC2",
             health_check_grace_period=300,
