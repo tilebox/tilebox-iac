@@ -13,7 +13,7 @@ The `tilebox_iac.aws` and `tilebox_iac.gcp` modules each provide:
 - `Secret` for credentials stored in the provider's secret manager
 - an IAM component for workload permissions: `IAMRole` on AWS and `ServiceAccount` on GCP
 
-## Runner contract
+## Runner configuration
 
 Clusters pull `ghcr.io/tilebox/runner:latest` anonymously by default. This repository consumes the official image;
 it does not build or publish runner images. The image owns the runner command and lifecycle.
