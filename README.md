@@ -2,7 +2,7 @@
 
 This Python library provides reusable [Pulumi](https://www.pulumi.com/) components for autoscaling Tilebox
 runner clusters on AWS and Google Cloud. Both implementations use Spot instances, CPU-based autoscaling, and the
-same runner image and environment contract.
+same runner image and environment configuration.
 
 ## Components
 
