@@ -134,6 +134,7 @@ write_files:
     StandardOutput=socket
 
 runcmd:
+# Allow Google Cloud health-check probes through the COS host firewall.
 - /sbin/iptables -A INPUT -s 130.211.0.0/22 -p tcp --dport 8080 -j ACCEPT
 - /sbin/iptables -A INPUT -s 35.191.0.0/16 -p tcp --dport 8080 -j ACCEPT
 - systemctl daemon-reload
