@@ -64,18 +64,6 @@ wheels = [
 ]
 
 [[package]]
-name = "dirhash"
-version = "0.5.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "scantree" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/1d/70/49f93897f3a4f7ab5f20a854ebc91aad47854e9fb2cd169e3a4452fa3f5e/dirhash-0.5.0.tar.gz", hash = "sha256:e60760f0ab2e935d8cb088923ea2c6492398dca42cec785df778985fd4cd5386", size = 21377, upload-time = "2024-08-03T22:14:13.322Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5e/1f/c8bf92552b7f0a13b9f12b85e3de8df6d9814240e0f8ce8f37433df028b3/dirhash-0.5.0-py3-none-any.whl", hash = "sha256:523dfd6b058c64f45b31604376926c6e2bd2ea301d0df23095d4055674e38b09", size = 13119, upload-time = "2024-08-03T22:14:11.688Z" },
-]
-
-[[package]]
 name = "googleapis-common-protos"
 version = "1.73.1"
 source = { registry = "https://pypi.org/simple" }
@@ -401,15 +389,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pathspec"
-version = "1.0.4"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fa/36/e27608899f9b8d4dff0617b2d9ab17ca5608956ca44461ac14ac48b44015/pathspec-1.0.4.tar.gz", hash = "sha256:0210e2ae8a21a9137c0d470578cb0e595af87edaa6ebf12ff176f14a02e0e645", size = 131200, upload-time = "2026-01-27T03:59:46.938Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/3c/2c197d226f9ea224a9ab8d197933f9da0ae0aac5b6e0f884e2b8d9c8e9f7/pathspec-1.0.4-py3-none-any.whl", hash = "sha256:fb6ae2fd4e7c921a165808a552060e722767cfa526f99ca5156ed2ce45a5c723", size = 55206, upload-time = "2026-01-27T03:59:45.137Z" },
-]
-
-[[package]]
 name = "protobuf"
 version = "6.33.6"
 source = { registry = "https://pypi.org/simple" }
@@ -458,21 +437,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d0/5c/df89de14fadeaf7332e0cbbd8111390103892a5ab00ac378e0e6e90ac004/pulumi_aws-7.23.0.tar.gz", hash = "sha256:24e8a79d0affb50f95f7a38b8de35cb3a4869bb14c91d2446aeeb0ebfe53074f", size = 8826507, upload-time = "2026-03-12T13:54:50.807Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/88/c7/6890f38b9ebdd2d5bfb6fffba5edc35783048d939bb8aa3f8abe2cf2a6ea/pulumi_aws-7.23.0-py3-none-any.whl", hash = "sha256:e4ad3e572c479fb18a3d9218b66ea8d97f60e26a9449f725acb99f52b26b0665", size = 11883431, upload-time = "2026-03-12T13:54:48.078Z" },
-]
-
-[[package]]
-name = "pulumi-command"
-version = "1.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "parver" },
-    { name = "pulumi" },
-    { name = "semver" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/cf/56/b7f66c9d2e4536b24a5bbe4e743093c7cdd689343d86f020419f4897a88d/pulumi_command-1.2.1.tar.gz", hash = "sha256:cbc9281a6571701ac5db598dac0246a058875b62f28c40c7cc0fcdc36898918d", size = 33022, upload-time = "2026-03-04T00:23:25.84Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fa/ce/1e5f30f868ba0827ca3311b0b171b12606e30c05e864714764d8d943fef1/pulumi_command-1.2.1-py3-none-any.whl", hash = "sha256:c7e465338e4363f114ddff99ee249260c7770ef4451b970ab51f7e8a37c9b030", size = 36861, upload-time = "2026-03-04T00:23:24.571Z" },
 ]
 
 [[package]]
@@ -593,19 +557,6 @@ wheels = [
 ]
 
 [[package]]
-name = "scantree"
-version = "0.0.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "attrs" },
-    { name = "pathspec" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b3/e4/40998faefc72ba1ddeb640a44fba92935353525dba110488806da8339c0b/scantree-0.0.4.tar.gz", hash = "sha256:15bd5cb24483b04db2c70653604e8ea3522e98087db7e38ab8482f053984c0ac", size = 24643, upload-time = "2024-08-03T20:08:59.413Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/ce/828467ddfa0d2fe473673026442d2032d552a168e42cfbf25fd0e5264e0c/scantree-0.0.4-py3-none-any.whl", hash = "sha256:7616ab65aa6b7f16fcf8e6fa1d9afaa99a27ab72bba05c61b691853b96763174", size = 20690, upload-time = "2024-08-03T20:08:58.137Z" },
-]
-
-[[package]]
 name = "semver"
 version = "3.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -619,11 +570,9 @@ name = "tilebox-iac"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "dirhash" },
     { name = "jinja2" },
     { name = "pulumi" },
     { name = "pulumi-aws" },
-    { name = "pulumi-command" },
     { name = "pulumi-gcp" },
 ]
 
@@ -635,11 +584,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dirhash", specifier = ">=0.5.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "pulumi", specifier = ">=3.186.0" },
     { name = "pulumi-aws", specifier = ">=6.60.0" },
-    { name = "pulumi-command", specifier = ">=1.1.0" },
     { name = "pulumi-gcp", specifier = ">=8.39.0" },
 ]
 

@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 from pulumi import Alias, ComponentResource, Input, Output, ResourceOptions
@@ -11,40 +11,36 @@ from pulumi_gcp.compute import (
     RegionAutoscaler,
     RegionInstanceGroupManager,
 )
-from typing_extensions import NotRequired
 
 from tilebox_iac.gcp.secrets import Secret
 from tilebox_iac.gcp.service_account import ServiceAccount, ServiceAccountConfigDict
+from tilebox_iac.release_runner import RUNNER_IMAGE
 
-env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
+# This template renders cloud-init YAML rather than HTML.
+env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=False)  # noqa: S701
 template = env.get_template("cloud-init.yaml")
 
 
 def _get_cloud_init(kwargs: dict[str, Any]) -> str:
     """Render the cloud-init config for the GCP VMs."""
-    image: str = kwargs["image"]
-    tag: str = kwargs["tag"]
+    runner_image: str = kwargs["runner_image"]
+    registry_hostname = runner_image.split("/", maxsplit=1)[0]
+    is_gcp_registry = registry_hostname == "gcr.io" or registry_hostname.endswith((".gcr.io", ".pkg.dev"))
     environment_variables: dict[str, str] = kwargs["environment_variables"]
     secrets: dict[str, str] = kwargs["secrets"]
 
     return template.render(
-        CONTAINER_IMAGE=f"{image}:{tag}",
-        REGISTRY_HOSTNAME=image.split("/", maxsplit=1)[0],
+        CONTAINER_IMAGE=runner_image,
+        GCP_REGISTRY_HOSTNAME=registry_hostname if is_gcp_registry else None,
         SECRETS=secrets,
         ENVIRONMENT_VARS=environment_variables,
     )
-
-
-class ContainerConfig(TypedDict):
-    image: Input[str]
-    tag: NotRequired[Input[str]]
 
 
 class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,
-        container: ContainerConfig,
         gcp_project: str,
         gcp_region: str,
         machine_type: str,
@@ -58,13 +54,13 @@ class AutoScalingCluster(ComponentResource):
             Sequence[Input[InstanceTemplateNetworkInterfaceArgs | InstanceTemplateNetworkInterfaceArgsDict]]
         ]
         | None = None,
+        runner_image: Input[str] = RUNNER_IMAGE,
         opts: ResourceOptions | None = None,
     ) -> None:
         """An auto-scaling cluster of Spot instances running a Docker container.
 
         Args:
             name: Name of the cluster.
-            container: Container image to run.
             gcp_project: GCP project ID to deploy the cluster in.
             gcp_region: Region to deploy the cluster in.
             machine_type: Machine type to use for the VMs.
@@ -72,18 +68,19 @@ class AutoScalingCluster(ComponentResource):
             cluster_enabled: Whether the cluster is enabled.
             min_replicas_config: Minimum number of replicas.
             max_replicas_config: Maximum number of replicas.
-            environment_variables: Environment variables to pass to the container.
+            environment_variables: Environment variables to pass to the runner. TILEBOX_API_KEY is required;
+                TILEBOX_CLUSTER is optional and defaults to the account's default cluster.
             roles: Roles to assign to the service account.
             network_interfaces: List of network interfaces to attach to the VMs.
+            runner_image: Runner container image. Defaults to the official Tilebox runner. Private Artifact Registry
+                images require reader permissions in roles.
             opts: Pulumi resource options.
         """
         opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:AutoScalingGCPCluster")]))
         super().__init__("tilebox:gcp:AutoScalingCluster", name, opts=opts)
 
-        if container.get("tag") == "":
-            raise ValueError(
-                "Container tag cannot be empty. Leave unset or manually set to `latest` to use the latest tag."
-            )
+        if environment_variables is None or "TILEBOX_API_KEY" not in environment_variables:
+            raise ValueError("environment_variables must include TILEBOX_API_KEY")
 
         required_roles = {
             "roles/monitoring.metricWriter",
@@ -100,12 +97,13 @@ class AutoScalingCluster(ComponentResource):
                     envs[key] = value
 
         if roles is None:
-            roles = {"roles": list(required_roles)}
+            role_config: ServiceAccountConfigDict = {"roles": list(required_roles)}
         else:
+            role_config = dict(roles)  # type: ignore[assignment]
             configured_roles = set(roles.get("roles", []))
-            roles["roles"] = list(required_roles | configured_roles)
+            role_config["roles"] = list(required_roles | configured_roles)
 
-        secret_roles = list(roles.get("secret_roles", []))
+        secret_roles = list(role_config.get("secret_roles", []))
         secret_roles.extend(
             [
                 {
@@ -116,10 +114,10 @@ class AutoScalingCluster(ComponentResource):
                 for secret in used_secrets.values()
             ]
         )
-        roles["secret_roles"] = secret_roles
+        role_config["secret_roles"] = secret_roles
 
         service_account = ServiceAccount.from_config(
-            name, gcp_project, roles, opts=ResourceOptions(depends_on=[*list(used_secrets.values())], parent=self)
+            name, gcp_project, role_config, opts=ResourceOptions(depends_on=[*list(used_secrets.values())], parent=self)
         )
 
         secrets = {}
@@ -127,8 +125,7 @@ class AutoScalingCluster(ComponentResource):
             secrets[secret_env_var] = secret.secret.id
 
         cloud_init_config = Output.all(
-            image=container["image"],
-            tag=container.get("tag", "latest"),
+            runner_image=runner_image,
             environment_variables=envs,
             secrets=secrets,
         ).apply(_get_cloud_init)

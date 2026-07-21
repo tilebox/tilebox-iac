@@ -56,7 +56,9 @@ write_files:
     Restart=always
     RestartSec=5
     Environment="HOME=/home/cloudservice"
-    ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries {{ REGISTRY_HOSTNAME }}
+    {% if GCP_REGISTRY_HOSTNAME %}
+    ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries {{ GCP_REGISTRY_HOSTNAME }}
+    {% endif %}
     ExecStartPre=/bin/bash /tmp/fetch-secrets.sh
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
 
