@@ -5,10 +5,12 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 from pulumi import Alias, ComponentResource, Input, Output, ResourceOptions
 from pulumi_gcp.compute import (
+    Firewall,
     InstanceTemplate,
     InstanceTemplateNetworkInterfaceArgs,
     InstanceTemplateNetworkInterfaceArgsDict,
     RegionAutoscaler,
+    RegionHealthCheck,
     RegionInstanceGroupManager,
 )
 
@@ -37,6 +39,23 @@ def _get_cloud_init(kwargs: dict[str, Any]) -> str:
     )
 
 
+def _get_health_check_network(network_interfaces: Any, health_check_network: str | None) -> str:
+    if health_check_network:
+        return health_check_network
+    if not network_interfaces:
+        return "default"
+
+    first_interface = network_interfaces[0]
+    network = (
+        first_interface.get("network")
+        if isinstance(first_interface, dict)
+        else getattr(first_interface, "network", None)
+    )
+    if not network:
+        raise ValueError("health_check_network is required when network_interfaces[0] does not specify its network")
+    return str(network)
+
+
 class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
@@ -57,6 +76,10 @@ class AutoScalingCluster(ComponentResource):
         runner_image: Input[str] = RUNNER_IMAGE,
         root_volume_size_gb: int = 40,
         opts: ResourceOptions | None = None,
+        *,
+        health_check_network: Input[str] | None = None,
+        health_check_network_project: Input[str] | None = None,
+        auto_healing_enabled: bool = False,
     ) -> None:
         """An auto-scaling cluster of Spot instances running a Docker container.
 
@@ -76,6 +99,11 @@ class AutoScalingCluster(ComponentResource):
             runner_image: Runner container image. Defaults to the official Tilebox runner. Private Artifact Registry
                 images require reader permissions in roles.
             root_volume_size_gb: Root persistent disk size in GiB. Defaults to 40 GiB.
+            health_check_network: VPC network for the runner health-check firewall. Defaults to the first network
+                interface's network, or the default VPC when no interfaces are configured.
+            health_check_network_project: Project that owns the health-check network. Defaults to gcp_project.
+            auto_healing_enabled: Whether the MIG replaces instances that fail runner health checks. Enable only after
+                every existing instance has rolled to a template containing the health endpoint.
             opts: Pulumi resource options.
         """
         opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:AutoScalingGCPCluster")]))
@@ -123,6 +151,38 @@ class AutoScalingCluster(ComponentResource):
             name, gcp_project, role_config, opts=ResourceOptions(depends_on=[*list(used_secrets.values())], parent=self)
         )
 
+        health_check = RegionHealthCheck(
+            f"{name}-health-check",
+            name=f"{name}-health-check",
+            project=gcp_project,
+            region=gcp_region,
+            check_interval_sec=30,
+            timeout_sec=5,
+            healthy_threshold=1,
+            unhealthy_threshold=3,
+            http_health_check={
+                "port": 8080,
+                "request_path": "/health",
+            },
+            opts=ResourceOptions(parent=self),
+        )
+        health_check_network_output = Output.all(
+            network_interfaces=network_interfaces,
+            health_check_network=health_check_network,
+        ).apply(lambda values: _get_health_check_network(values["network_interfaces"], values["health_check_network"]))
+        health_check_firewall = Firewall(
+            f"{name}-health-check",
+            name=f"{name}-health-check",
+            project=health_check_network_project if health_check_network_project is not None else gcp_project,
+            network=health_check_network_output,
+            direction="INGRESS",
+            # Google Cloud health-check probe ranges.
+            source_ranges=["130.211.0.0/22", "35.191.0.0/16"],
+            target_service_accounts=[service_account.email],
+            allows=[{"protocol": "tcp", "ports": ["8080"]}],
+            opts=ResourceOptions(depends_on=[service_account], parent=self),
+        )
+
         secrets = {}
         for secret_env_var, secret in used_secrets.items():
             secrets[secret_env_var] = secret.secret.id
@@ -135,6 +195,7 @@ class AutoScalingCluster(ComponentResource):
 
         instance_template = InstanceTemplate(
             f"{name}-template",
+            project=gcp_project,
             machine_type=machine_type,
             metadata={
                 "user-data": cloud_init_config,
@@ -166,6 +227,7 @@ class AutoScalingCluster(ComponentResource):
 
         mig = RegionInstanceGroupManager(
             f"{name}-mig",
+            project=gcp_project,
             base_instance_name=name,
             region=gcp_region,
             versions=[
@@ -180,7 +242,18 @@ class AutoScalingCluster(ComponentResource):
                 "max_surge_fixed": 10,
                 "max_unavailable_fixed": 0,
             },
-            opts=ResourceOptions(depends_on=[instance_template], parent=self),
+            auto_healing_policies=(
+                {
+                    "health_check": health_check.id,
+                    "initial_delay_sec": 900,
+                }
+                if auto_healing_enabled
+                else None
+            ),
+            opts=ResourceOptions(
+                depends_on=[instance_template, health_check, health_check_firewall],
+                parent=self,
+            ),
         )
 
         if cluster_enabled:
@@ -192,6 +265,7 @@ class AutoScalingCluster(ComponentResource):
 
         self.autoscaler = RegionAutoscaler(
             f"{name}-autoscaler",
+            project=gcp_project,
             target=mig.self_link,
             region=gcp_region,
             autoscaling_policy={

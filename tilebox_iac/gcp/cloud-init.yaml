@@ -53,6 +53,23 @@ write_files:
 
     chmod 600 "${OUTPUT_FILE}"
 
+- path: /usr/local/bin/cloudservice-health
+  permissions: 0755
+  owner: root
+  content: |
+    #!/bin/bash
+    set -euo pipefail
+
+    while IFS= read -r line; do
+        [[ "${line}" == $'\r' || -z "${line}" ]] && break
+    done
+
+    if [ "$(docker inspect --format '{% raw %}{{.State.Running}}{% endraw %}' cloudservice.service 2>/dev/null || true)" = "true" ]; then
+        printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    else
+        printf 'HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    fi
+
 - path: /etc/systemd/system/cloudservice.service
   permissions: 0644
   owner: root
@@ -86,6 +103,38 @@ write_files:
     ExecStop=-/usr/bin/docker stop %n
     ExecStopPost=-/usr/bin/docker rm %n
 
+- path: /etc/systemd/system/cloudservice-health.socket
+  permissions: 0644
+  owner: root
+  content: |
+    [Unit]
+    Description=Tilebox Workflow Runner Health Socket
+
+    [Socket]
+    ListenStream=8080
+    Accept=yes
+
+    [Install]
+    WantedBy=sockets.target
+
+- path: /etc/systemd/system/cloudservice-health@.service
+  permissions: 0644
+  owner: root
+  content: |
+    [Unit]
+    Description=Serve Tilebox Workflow Runner Health
+    After=docker.service
+    Requires=docker.service
+
+    [Service]
+    Type=oneshot
+    TimeoutStartSec=5s
+    ExecStart=/usr/local/bin/cloudservice-health
+    StandardInput=socket
+    StandardOutput=socket
+
 runcmd:
 - systemctl daemon-reload
 - systemctl start cloudservice.service
+- systemctl enable cloudservice-health.socket
+- systemctl start cloudservice-health.socket
