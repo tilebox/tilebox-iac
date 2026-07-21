@@ -1,48 +1,40 @@
 import base64
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 from pulumi import ComponentResource, Input, Output, ResourceOptions
 from pulumi_aws import autoscaling as aws_autoscaling
 from pulumi_aws import ec2 as aws_ec2
-from typing_extensions import NotRequired
 
 from tilebox_iac.aws.iam_role import IAMRole, IAMRoleConfigDict
 from tilebox_iac.aws.secrets import Secret
+from tilebox_iac.release_runner import RUNNER_IMAGE
 
-env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=True)
+# This template renders cloud-init YAML rather than HTML.
+env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=False)  # noqa: S701
 template = env.get_template("cloud-init.yaml")
 
 
 def _get_cloud_init(kwargs: dict[str, Any]) -> str:
     """Render the cloud-init config for the AWS VMs."""
-    image: str = kwargs["image"]
-    tag: str = kwargs["tag"] or "latest"  # Default empty string to "latest"
     environment_variables: dict[str, str] = kwargs["environment_variables"]
     secrets: dict[str, str] = kwargs["secrets"]
     secret_versions: dict[str, str] = kwargs["secret_versions"]
 
     return template.render(
-        CONTAINER_IMAGE=f"{image}:{tag}",
-        REGISTRY_HOSTNAME=image.split("/", maxsplit=1)[0],
+        CONTAINER_IMAGE=RUNNER_IMAGE,
         SECRETS=secrets,
         SECRET_VERSIONS=secret_versions,
         ENVIRONMENT_VARS=environment_variables,
     )
 
 
-class ContainerConfig(TypedDict):
-    image: Input[str]
-    tag: NotRequired[Input[str]]
-
-
 class AutoScalingCluster(ComponentResource):
     def __init__(  # noqa: PLR0913
         self,
         name: str,
-        container: ContainerConfig,
         instance_type: str,
         cpu_target: float,
         cluster_enabled: bool,
@@ -59,7 +51,6 @@ class AutoScalingCluster(ComponentResource):
 
         Args:
             name: Name of the cluster.
-            container: Container image to run (ECR image URL).
             instance_type: EC2 instance type to use.
             cpu_target: CPU target for autoscaling (0.0 to 1.0).
             cluster_enabled: Whether the cluster is enabled.
@@ -75,6 +66,9 @@ class AutoScalingCluster(ComponentResource):
         """
         super().__init__("tilebox:aws:AutoScalingCluster", name, opts=opts)
 
+        if environment_variables is None or "TILEBOX_API_KEY" not in environment_variables:
+            raise ValueError("environment_variables must include TILEBOX_API_KEY")
+
         used_secrets: dict[str, Secret] = {}
         envs: dict[str, Input[str]] = {}
 
@@ -89,13 +83,6 @@ class AutoScalingCluster(ComponentResource):
 
         # Copy to avoid mutating caller's config (could cause side effects if reused)
         iam_config_copy: IAMRoleConfigDict = dict(iam_config) if iam_config else {}  # type: ignore[assignment]
-
-        # ECR read access is required for cloud-init to docker pull the container image
-        managed_policies = list(iam_config_copy.get("managed_policies", []))
-        ecr_policy = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-        if ecr_policy not in managed_policies:
-            managed_policies.append(ecr_policy)
-        iam_config_copy["managed_policies"] = managed_policies  # type: ignore[typeddict-item]
 
         secrets_access = list(iam_config_copy.get("secrets_access", []))
         secrets_access.extend(
@@ -119,8 +106,6 @@ class AutoScalingCluster(ComponentResource):
             secret_versions[secret_env_var] = secret.latest_version
 
         cloud_init_config = Output.all(
-            image=container["image"],
-            tag=container.get("tag", "latest"),
             environment_variables=envs,
             secrets=secrets,
             secret_versions=secret_versions,

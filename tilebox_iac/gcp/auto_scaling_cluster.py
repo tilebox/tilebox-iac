@@ -29,7 +29,7 @@ def _get_cloud_init(kwargs: dict[str, Any]) -> str:
 
     return template.render(
         CONTAINER_IMAGE=f"{image}:{tag}",
-        REGISTRY_HOSTNAME=image.split("/")[0],
+        REGISTRY_HOSTNAME=image.split("/", maxsplit=1)[0],
         SECRETS=secrets,
         ENVIRONMENT_VARS=environment_variables,
     )
