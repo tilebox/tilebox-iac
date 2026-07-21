@@ -2,13 +2,13 @@
 
 write_files:
 - path: /tmp/environment.env
-  permissions: 0600
+  permissions: '0600'
   owner: root
   encoding: b64
   content: "{{ ENVIRONMENT_FILE }}"
 
 - path: /tmp/fetch-secrets.sh
-  permissions: 0755
+  permissions: '0755'
   owner: root
   content: |
     #!/bin/bash
@@ -53,8 +53,8 @@ write_files:
 
     chmod 600 "${OUTPUT_FILE}"
 
-- path: /usr/local/bin/cloudservice-health
-  permissions: 0755
+- path: /etc/cloudservice-health
+  permissions: '0755'
   owner: root
   content: |
     #!/bin/bash
@@ -71,7 +71,7 @@ write_files:
     fi
 
 - path: /etc/systemd/system/cloudservice.service
-  permissions: 0644
+  permissions: '0644'
   owner: root
   content: |
     [Unit]
@@ -104,7 +104,7 @@ write_files:
     ExecStopPost=-/usr/bin/docker rm %n
 
 - path: /etc/systemd/system/cloudservice-health.socket
-  permissions: 0644
+  permissions: '0644'
   owner: root
   content: |
     [Unit]
@@ -118,7 +118,7 @@ write_files:
     WantedBy=sockets.target
 
 - path: /etc/systemd/system/cloudservice-health@.service
-  permissions: 0644
+  permissions: '0644'
   owner: root
   content: |
     [Unit]
@@ -129,12 +129,13 @@ write_files:
     [Service]
     Type=oneshot
     TimeoutStartSec=5s
-    ExecStart=/usr/local/bin/cloudservice-health
+    ExecStart=/etc/cloudservice-health
     StandardInput=socket
     StandardOutput=socket
 
 runcmd:
+- /sbin/iptables -A INPUT -s 130.211.0.0/22 -p tcp --dport 8080 -j ACCEPT
+- /sbin/iptables -A INPUT -s 35.191.0.0/16 -p tcp --dport 8080 -j ACCEPT
 - systemctl daemon-reload
 - systemctl start cloudservice.service
-- systemctl enable cloudservice-health.socket
 - systemctl start cloudservice-health.socket
