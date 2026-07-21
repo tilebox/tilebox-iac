@@ -6,6 +6,12 @@ packages:
   - awscli
 
 write_files:
+- path: /tmp/environment.env
+  permissions: '0600'
+  owner: root
+  encoding: b64
+  content: "{{ ENVIRONMENT_FILE }}"
+
 - path: /tmp/fetch-secrets.sh
   permissions: '0755'
   owner: root
@@ -19,6 +25,10 @@ write_files:
     REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
     {% for secret_var, secret_arn in SECRETS.items() %}
     SECRET_VALUE=$(aws secretsmanager get-secret-value --region "${REGION}" --secret-id "{{ secret_arn }}" --query SecretString --output text)
+    if [[ "${SECRET_VALUE}" == *$'\r'* || "${SECRET_VALUE}" == *$'\n'* ]]; then
+        echo "Secret value for {{ secret_var }} contains an unsupported newline" >&2
+        exit 1
+    fi
     printf '%s=%s\n' "{{ secret_var }}" "${SECRET_VALUE}" >> "${OUTPUT_FILE}"
     {% endfor %}
     chmod 600 "${OUTPUT_FILE}"
@@ -41,7 +51,7 @@ write_files:
     ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region {{ ECR_REGION }} | docker login --username AWS --password-stdin {{ REGISTRY_HOSTNAME }}'
     {% endif %}
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
-    ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /tmp/secrets.env {% for key, value in ENVIRONMENT_VARS.items() %}-e {{ key }}={{ value }} {% endfor %}{{ CONTAINER_IMAGE }}
+    ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /tmp/environment.env --env-file /tmp/secrets.env {{ CONTAINER_IMAGE }}
     ExecStop=/usr/bin/docker stop cloudservice
 
     [Install]

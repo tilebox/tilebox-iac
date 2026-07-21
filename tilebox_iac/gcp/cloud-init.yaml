@@ -1,6 +1,12 @@
 #cloud-config
 
 write_files:
+- path: /tmp/environment.env
+  permissions: 0600
+  owner: root
+  encoding: b64
+  content: "{{ ENVIRONMENT_FILE }}"
+
 - path: /tmp/fetch-secrets.sh
   permissions: 0755
   owner: root
@@ -36,7 +42,12 @@ write_files:
     {% if SECRETS %}
     ACCESS_TOKEN=$(get_access_token)
     {% for secret_var, secret_name in SECRETS.items() %}
-    printf '%s=%s\n' "{{ secret_var }}" "$(fetch_secret "{{ secret_name }}" "${ACCESS_TOKEN}")" >> "${OUTPUT_FILE}"
+    SECRET_VALUE=$(fetch_secret "{{ secret_name }}" "${ACCESS_TOKEN}")
+    if [[ "${SECRET_VALUE}" == *$'\r'* || "${SECRET_VALUE}" == *$'\n'* ]]; then
+        echo "Secret value for {{ secret_var }} contains an unsupported newline" >&2
+        exit 1
+    fi
+    printf '%s=%s\n' "{{ secret_var }}" "${SECRET_VALUE}" >> "${OUTPUT_FILE}"
     {% endfor %}
     {% endif %}
 
@@ -68,7 +79,7 @@ write_files:
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
 
     ExecStart=/usr/bin/docker run --rm \
-      {% for key, value in ENVIRONMENT_VARS.items() %}-e {{ key }}="{{ value }}" {% endfor %} \
+      --env-file /tmp/environment.env \
       --env-file /tmp/secrets.env \
       --name %n \
       {{ CONTAINER_IMAGE }}

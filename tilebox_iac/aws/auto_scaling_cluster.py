@@ -10,7 +10,7 @@ from pulumi_aws import ec2 as aws_ec2
 
 from tilebox_iac.aws.iam_role import IAMRole, IAMRoleConfigDict
 from tilebox_iac.aws.secrets import Secret
-from tilebox_iac.release_runner import RUNNER_IMAGE
+from tilebox_iac.release_runner import RUNNER_IMAGE, encode_environment_variables, validate_environment_variable_name
 
 # This template renders cloud-init YAML rather than HTML.
 env = Environment(loader=FileSystemLoader(Path(__file__).parent), autoescape=False)  # noqa: S701
@@ -33,7 +33,7 @@ def _get_cloud_init(kwargs: dict[str, Any]) -> str:
         REGISTRY_HOSTNAME=registry_hostname,
         SECRETS=secrets,
         SECRET_VERSIONS=secret_versions,
-        ENVIRONMENT_VARS=environment_variables,
+        ENVIRONMENT_FILE=encode_environment_variables(environment_variables),
     )
 
 
@@ -87,6 +87,7 @@ class AutoScalingCluster(ComponentResource):
         if environment_variables is not None:
             # Sort keys for deterministic cloud-init output (avoids spurious Pulumi diffs)
             for key in sorted(environment_variables):
+                validate_environment_variable_name(key)
                 value = environment_variables[key]
                 if isinstance(value, Secret):
                     used_secrets[key] = value
