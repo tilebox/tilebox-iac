@@ -30,7 +30,7 @@ network = aws.Network("workflow-runners", aws_region=aws_region)
 cluster = aws.AutoScalingCluster(
     "workflow-runners",
     instance_type="m7i.large",
-    cpu_target=0.7,
+    cpu_target=0.2,
     cluster_enabled=True,
     min_replicas_config=1,
     max_replicas_config=10,
