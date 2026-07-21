@@ -40,6 +40,7 @@ def _get_cloud_init(kwargs: dict[str, Any]) -> str:
 
 
 def _get_health_check_network(network_interfaces: Any, health_check_network: str | None) -> str:
+    """Resolve the VPC for the health-check firewall from an override or the first instance interface."""
     if health_check_network:
         return health_check_network
     if not network_interfaces:
@@ -245,7 +246,7 @@ class AutoScalingCluster(ComponentResource):
             auto_healing_policies=(
                 {
                     "health_check": health_check.id,
-                    "initial_delay_sec": 900,
+                    "initial_delay_sec": 300,
                 }
                 if auto_healing_enabled
                 else None
