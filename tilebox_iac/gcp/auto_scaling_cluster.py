@@ -55,6 +55,7 @@ class AutoScalingCluster(ComponentResource):
         ]
         | None = None,
         runner_image: Input[str] = RUNNER_IMAGE,
+        root_volume_size_gb: int = 40,
         opts: ResourceOptions | None = None,
     ) -> None:
         """An auto-scaling cluster of Spot instances running a Docker container.
@@ -74,6 +75,7 @@ class AutoScalingCluster(ComponentResource):
             network_interfaces: List of network interfaces to attach to the VMs.
             runner_image: Runner container image. Defaults to the official Tilebox runner. Private Artifact Registry
                 images require reader permissions in roles.
+            root_volume_size_gb: Root persistent disk size in GiB. Defaults to 40 GiB.
             opts: Pulumi resource options.
         """
         opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:AutoScalingGCPCluster")]))
@@ -143,7 +145,7 @@ class AutoScalingCluster(ComponentResource):
                     "source_image": "cos-cloud/cos-stable",
                     "auto_delete": True,
                     "boot": True,
-                    "disk_size_gb": 20,
+                    "disk_size_gb": root_volume_size_gb,
                 },
             ],
             network_interfaces=network_interfaces,
