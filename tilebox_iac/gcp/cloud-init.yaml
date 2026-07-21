@@ -48,8 +48,13 @@ write_files:
   content: |
     [Unit]
     Description=Tilebox Workflow Runner
+    {% if GCP_REGISTRY_HOSTNAME %}
     Wants=gcr-online.target
     After=gcr-online.target
+    {% else %}
+    Wants=network-online.target
+    After=network-online.target
+    {% endif %}
 
     [Service]
     Type=simple
