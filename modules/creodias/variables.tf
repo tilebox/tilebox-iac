@@ -3,8 +3,8 @@ variable "name" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$", var.name))
-    error_message = "name must be a lowercase Kubernetes DNS label of at most 63 characters."
+    condition     = can(regex("^[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$", var.name))
+    error_message = "name must start with a lowercase letter and be a lowercase DNS label of at most 63 characters."
   }
 }
 

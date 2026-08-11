@@ -18,7 +18,8 @@ replicas remain Pending until the managed cluster autoscaler adds workers.
 - Keep `min_replicas` and `max_replicas` equal to the CREODIAS node-pool bounds.
 - The five-minute HPA scale-down stabilization avoids rapid worker churn.
 - The Deployment uses zero surge and one unavailable pod during updates so a rollout does not request capacity beyond
-  the one-pod-per-worker ceiling.
+  the one-pod-per-worker ceiling. With one replica, this intentionally means a brief period with no available runner
+  while the old pod stops and its replacement starts.
 
 Verify the cluster exposes CPU resource metrics before relying on HPA:
 
