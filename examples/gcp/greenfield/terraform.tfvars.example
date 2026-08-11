@@ -1,0 +1,6 @@
+project_id = "replace-with-an-existing-evaluation-project"
+region     = "europe-west1"
+
+environment_variables = {
+  TILEBOX_CLUSTER = "replace-with-an-optional-cluster-slug"
+}
