@@ -197,12 +197,6 @@ variable "service_account_id" {
   }
 }
 
-variable "auto_healing_enabled" {
-  description = "Attach the container-state auto-healing policy. Disable temporarily when adopting a pre-existing fleet whose instances do not yet serve the health endpoint."
-  type        = bool
-  default     = true
-}
-
 variable "labels" {
   description = "Additional labels for module-owned GCP resources."
   type        = map(string)

@@ -207,12 +207,9 @@ resource "google_compute_region_instance_group_manager" "runner" {
     max_unavailable_fixed = 0
   }
 
-  dynamic "auto_healing_policies" {
-    for_each = var.auto_healing_enabled ? [1] : []
-    content {
-      health_check      = google_compute_region_health_check.runner.id
-      initial_delay_sec = 300
-    }
+  auto_healing_policies {
+    health_check      = google_compute_region_health_check.runner.id
+    initial_delay_sec = 300
   }
 
   depends_on = [google_compute_firewall.health_check]

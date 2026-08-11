@@ -32,17 +32,10 @@ Cloud Run, and Artifact Registry permissions.
 Secret references are preferred: instances fetch `versions/latest` on every service start. Plain environment values
 are embedded in instance metadata and Terraform/OpenTofu state. Sensitive inputs are redacted, not omitted from state.
 
-## Auto-healing rollout
+## Auto-healing
 
-Automatic healing is enabled by default so persistent container failures cause GCP to replace the VM. A fresh
-deployment creates the health-capable template, restricted firewall, health check, and MIG together.
-
-When adopting a pre-existing fleet whose instances do not yet expose the health endpoint, stage the rollout:
-
-1. Apply with `auto_healing_enabled = false`.
-2. Wait for every instance to use the current template and verify the regional health check reports all instances
-   healthy.
-3. Apply again with `auto_healing_enabled = true`.
+Automatic healing replaces VMs with persistent container failures. The module creates the health-capable template,
+restricted firewall, health check, and MIG together.
 
 The VPC firewall and COS guest firewall both allow port 8080 only from `130.211.0.0/22` and `35.191.0.0/16`.
 

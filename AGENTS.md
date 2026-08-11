@@ -33,8 +33,7 @@ Provider-specific modules live under `modules/`; deployable examples live under 
 - Keep AWS `autoscaling:SetInstanceHealth` permission scoped to the module's ASG name, account, region, and partition.
 - GCP uses a regional HTTP health check on port 8080. Restrict both VPC and COS guest-firewall access to Google's
   documented health-check ranges.
-- Keep GCP automatic healing enabled by default for fresh deployments. When adopting a pre-existing fleet, disable it
-  for the initial health-capable template rollout and enable it only after every instance reports healthy.
+- Keep GCP automatic healing enabled for runner fleets.
 - AWS and GCP health checks only test whether the Docker container is running. Do not describe them as application
   liveness, Tilebox connectivity, or task execution checks.
 - Container-Optimized OS mounts `/usr` read-only and generic `/var` and `/tmp` as non-executable. Put executable startup
