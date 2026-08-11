@@ -34,7 +34,10 @@ are embedded in instance metadata and Terraform/OpenTofu state. Sensitive inputs
 
 ## Auto-healing rollout
 
-Automatic healing is opt-in to avoid replacing an existing fleet before every VM exposes the new health endpoint:
+Automatic healing is enabled by default so persistent container failures cause GCP to replace the VM. A fresh
+deployment creates the health-capable template, restricted firewall, health check, and MIG together.
+
+When adopting a pre-existing fleet whose instances do not yet expose the health endpoint, stage the rollout:
 
 1. Apply with `auto_healing_enabled = false`.
 2. Wait for every instance to use the current template and verify the regional health check reports all instances

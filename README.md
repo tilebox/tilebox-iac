@@ -63,9 +63,9 @@ Their health checks report whether the Docker container is running. They do not 
 execution.
 
 AWS instances report persistent container failures to their own Auto Scaling Group. GCP exposes an HTTP endpoint on
-port 8080 only to Google Cloud's documented health-check ranges. GCP automatic healing is disabled by default: fleets
-must first roll completely onto a health-capable template, then enable healing in a separate deployment after every
-instance reports healthy.
+port 8080 only to Google Cloud's documented health-check ranges and replaces persistently unhealthy VMs by default.
+When adopting a pre-existing fleet without the health endpoint, disable automatic healing for the initial template
+rollout and enable it after every instance reports healthy.
 
 ## CREODIAS deployment order
 

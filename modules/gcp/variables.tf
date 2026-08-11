@@ -198,9 +198,9 @@ variable "service_account_id" {
 }
 
 variable "auto_healing_enabled" {
-  description = "Attach the container-state auto-healing policy. Leave false for the first rollout and enable only after every instance serves the health endpoint."
+  description = "Attach the container-state auto-healing policy. Disable temporarily when adopting a pre-existing fleet whose instances do not yet serve the health endpoint."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "labels" {
