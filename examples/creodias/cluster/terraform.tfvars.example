@@ -1,0 +1,6 @@
+kubernetes_version   = "replace-with-an-exact-version-offered-in-your-region"
+control_plane_flavor = "replace-with-an-available-control-plane-flavor"
+worker_flavor        = "replace-with-an-available-worker-flavor"
+
+# Optional existing network IDs. Configure OpenStack network RBAC before use.
+shared_network_ids = []
