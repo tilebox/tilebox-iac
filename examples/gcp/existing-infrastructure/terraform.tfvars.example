@@ -1,0 +1,12 @@
+project_id = "replace-with-your-workload-project"
+region     = "europe-west1"
+
+network_self_link    = "https://www.googleapis.com/compute/v1/projects/example/global/networks/runner-network"
+subnetwork_self_link = "https://www.googleapis.com/compute/v1/projects/example/regions/europe-west1/subnetworks/runner-subnet"
+
+tilebox_api_key_secret_project_id = "replace-with-your-secret-project"
+tilebox_api_key_secret_id         = "tilebox-api-key"
+
+environment_variables = {
+  TILEBOX_CLUSTER = "replace-with-an-optional-cluster-slug"
+}

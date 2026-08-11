@@ -1,0 +1,122 @@
+#cloud-config
+
+write_files:
+- path: /etc/tilebox/environment.env
+  permissions: '0600'
+  owner: root
+  encoding: b64
+  content: "${environment_file}"
+
+- path: /etc/tilebox/fetch-secrets
+  permissions: '0755'
+  owner: root
+  content: |
+    #!/bin/bash
+    set -euo pipefail
+
+    OUTPUT_FILE="$${1:-/run/tilebox/secrets.env}"
+    install -d -m 0700 "$(dirname "$${OUTPUT_FILE}")"
+    : > "$${OUTPUT_FILE}"
+
+%{ if length(secret_environment_variables) > 0 ~}
+    ACCESS_TOKEN=$(curl --fail --silent --show-error \
+      -H "Metadata-Flavor: Google" \
+      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+      | jq -r ".access_token")
+%{ for name, secret_name in secret_environment_variables ~}
+    SECRET_VALUE=$(curl --fail --silent --show-error \
+      -H "Authorization: Bearer $${ACCESS_TOKEN}" \
+      "https://secretmanager.googleapis.com/v1/${secret_name}/versions/latest:access" \
+      | jq -r ".payload.data" \
+      | base64 -d)
+    if [[ "$${SECRET_VALUE}" == *$'\r'* || "$${SECRET_VALUE}" == *$'\n'* ]]; then
+      echo "Secret value for ${name} contains an unsupported newline" >&2
+      exit 1
+    fi
+    printf '%s=%s\n' "${name}" "$${SECRET_VALUE}" >> "$${OUTPUT_FILE}"
+%{ endfor ~}
+%{ endif ~}
+
+    chmod 600 "$${OUTPUT_FILE}"
+
+- path: /etc/tilebox/cloudservice-health
+  permissions: '0755'
+  owner: root
+  content: |
+    #!/bin/bash
+    set -euo pipefail
+
+    while IFS= read -r line; do
+      [[ "$${line}" == $'\r' || -z "$${line}" ]] && break
+    done
+
+    if [ "$(docker inspect --format '{{.State.Running}}' cloudservice.service 2>/dev/null || true)" = "true" ]; then
+      printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    else
+      printf 'HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+    fi
+
+- path: /etc/systemd/system/cloudservice.service
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Tilebox Workflow Runner
+%{ if gcp_registry_hostname != "" ~}
+    Wants=gcr-online.target
+    After=gcr-online.target
+%{ else ~}
+    Wants=network-online.target
+    After=network-online.target
+%{ endif ~}
+
+    [Service]
+    Type=simple
+    Restart=always
+    RestartSec=5
+    Environment="HOME=/home/cloudservice"
+%{ if gcp_registry_hostname != "" ~}
+    ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries ${gcp_registry_hostname}
+%{ endif ~}
+    ExecStartPre=/etc/tilebox/fetch-secrets /run/tilebox/secrets.env
+    ExecStartPre=/usr/bin/docker pull ${container_image}
+    ExecStart=/usr/bin/docker run --rm --env-file /etc/tilebox/environment.env --env-file /run/tilebox/secrets.env --name %n ${container_image}
+    ExecStop=-/usr/bin/docker stop %n
+    ExecStopPost=-/usr/bin/docker rm %n
+
+- path: /etc/systemd/system/cloudservice-health.socket
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Tilebox Workflow Runner Health Socket
+
+    [Socket]
+    ListenStream=8080
+    Accept=yes
+
+    [Install]
+    WantedBy=sockets.target
+
+- path: /etc/systemd/system/cloudservice-health@.service
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Serve Tilebox Workflow Runner Health
+    After=docker.service
+    Requires=docker.service
+
+    [Service]
+    Type=oneshot
+    TimeoutStartSec=5s
+    ExecStart=/etc/tilebox/cloudservice-health
+    StandardInput=socket
+    StandardOutput=socket
+
+runcmd:
+  - /sbin/iptables -A INPUT -s 130.211.0.0/22 -p tcp --dport 8080 -j ACCEPT
+  - /sbin/iptables -A INPUT -s 35.191.0.0/16 -p tcp --dport 8080 -j ACCEPT
+  - systemctl daemon-reload
+  - systemctl start cloudservice.service
+  - systemctl start cloudservice-health.socket
