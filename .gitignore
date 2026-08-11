@@ -1,17 +1,35 @@
-.venv/
+# Terraform and OpenTofu working data
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+crash.log
+crash.*.log
 
-__pycache__/
-.ipynb_checkpoints/
+# Local inputs and generated plans may contain credentials
+*.tfvars
+*.tfvars.json
+*.tfplan
 
+# Local CLI configuration
+.terraformrc
+terraform.rc
+
+# Local override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# This repository contains multiple independently validated roots. Consumers
+# should commit the lock file generated in their own root configuration.
+.terraform.lock.hcl
+
+# Editors and operating systems
 .idea/
+.DS_Store
 
-.hypothesis/
-.mypy_cache/
+# Local remnants from the retired Python implementation
+.venv/
 .ruff_cache/
-.pytest_cache/
-
-dist/
-
-coverage.xml
-.coverage*
-test-report.xml
+__pycache__/

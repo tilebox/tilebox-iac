@@ -1,107 +1,128 @@
-# Tilebox infrastructure components
+# Tilebox runner infrastructure
 
-This Python library provides reusable [Pulumi](https://www.pulumi.com/) components for autoscaling Tilebox
-runner clusters on AWS and Google Cloud. Both implementations use Spot instances, CPU-based autoscaling, and the
-same runner image and environment configuration.
+Terraform and OpenTofu modules for autoscaling [Tilebox](https://tilebox.com/) runner clusters on AWS, Google Cloud,
+and CREODIAS (CloudFerro Managed Kubernetes).
 
-## Components
+The modules are designed to fit into an existing environment. AWS consumes subnet IDs, GCP consumes an existing
+project/network/subnetwork, and CREODIAS consumes optional shared network IDs. They do not create or take ownership of
+a customer's landing zone. Small greenfield examples are included for evaluation and disposable deployments only.
 
-The `tilebox_iac.aws` and `tilebox_iac.gcp` modules each provide:
+## Modules
 
-- `AutoScalingCluster` for runner compute and autoscaling
-- `Network` for the cloud-specific network resources
-- `Secret` for credentials stored in the provider's secret manager
-- an IAM component for workload permissions: `IAMRole` on AWS and `ServiceAccount` on GCP
+| Module | Creates | Existing infrastructure it consumes |
+| --- | --- | --- |
+| [`modules/aws`](modules/aws) | Spot EC2 Auto Scaling Group, launch template, autoscaler, and optional workload identity | Subnets and optional security groups |
+| [`modules/gcp`](modules/gcp) | Spot regional MIG, instance template, autoscaler, health check, and optional workload identity | Project, VPC network, and regional subnetwork |
+| [`modules/creodias`](modules/creodias) | CloudFerro Managed Kubernetes cluster and autoscaled runner worker pool | Optional shared OpenStack network IDs |
+| [`modules/kubernetes-runner`](modules/kubernetes-runner) | Runner Deployment, Secret, ServiceAccount, and HPA | An existing Kubernetes cluster and provider configuration |
 
-## Usage
+Every provider uses `ghcr.io/tilebox/runner:latest` by default. The image is pulled anonymously and this repository
+does not build, publish, or mirror it. Set `runner_image` to use a prebuilt custom image and configure the provider's
+native registry authentication and workload permissions separately.
 
-This AWS example creates a network and a runner cluster using the official image:
+## Get started
 
-```python
-import pulumi
+Start with the example matching your environment:
 
-from tilebox_iac import aws
+- [AWS with existing infrastructure](examples/aws/existing-infrastructure)
+- [GCP with existing infrastructure](examples/gcp/existing-infrastructure)
+- [CREODIAS cluster and runner](examples/creodias)
+- [Disposable AWS greenfield example](examples/aws/greenfield)
+- [Disposable GCP greenfield example](examples/gcp/greenfield)
 
-config = pulumi.Config()
-aws_region = pulumi.Config("aws").require("region")
+Copy an example into your own root configuration, replace its local module source with a pinned release or commit,
+and configure a remote backend. For example:
 
-network = aws.Network("workflow-runners", aws_region=aws_region)
+```hcl
+module "runner" {
+  source = "git::https://github.com/tilebox/tilebox-iac.git//modules/aws?ref=<release-or-commit>"
 
-cluster = aws.AutoScalingCluster(
-    "workflow-runners",
-    instance_type="m7i.large",
-    cpu_target=0.2,
-    cluster_enabled=True,
-    min_replicas_config=1,
-    max_replicas_config=10,
-    subnet_ids=[network.private_subnet_id],
-    environment_variables={
-        "TILEBOX_API_KEY": config.require_secret("tileboxApiKey"),
-    },
-)
+  # See examples/aws/existing-infrastructure for the required inputs.
+}
 ```
 
-Configure the API key before deploying:
+Then initialize and validate with either OpenTofu or Terraform:
 
 ```bash
-pulumi config set --secret tileboxApiKey
-pulumi up
+tofu init
+tofu validate
+tofu plan
 ```
+
+Replace `tofu` with `terraform` to use Terraform. Root configurations should commit their generated provider lock
+file. This multi-root module repository does not commit generated lock files.
 
 ## Runner configuration
 
-Clusters pull `ghcr.io/tilebox/runner:latest` anonymously by default. This repository consumes the official image;
-it does not build or publish runner images. The image owns the runner command and lifecycle.
+`TILEBOX_API_KEY` is required. AWS and GCP receive a reference to an existing Secrets Manager or Secret Manager
+secret, respectively, and fetch its latest value at boot. `TILEBOX_CLUSTER` is optional; omitting it uses the Tilebox
+account's default cluster. Add other runner settings through `environment_variables`.
 
-Each cluster passes the configured `environment_variables` to the container:
-
-- `TILEBOX_API_KEY` is required and may be a plain Pulumi input or a provider-specific `Secret`.
-- `TILEBOX_CLUSTER` is optional. When omitted, the runner uses the account's default cluster.
-- Additional runner environment variables use the same mapping.
-
-AWS and GCP root disks default to 40 GiB. Set `root_volume_size_gb` to change the size. Boot volumes are deleted with
-their instances.
-
-### Custom images
-
-Set `runner_image` to run a prebuilt custom image instead of the official image. Image building and publishing remain
-outside this library.
-
-- AWS authenticates to private ECR registries. Grant the instance role ECR pull permissions through `iam_config`.
-- GCP authenticates to GCR and Artifact Registry. Grant the service account image-reader permissions through `roles`.
-- Images in public registries are pulled anonymously.
-
-## Instance health
-
-Both providers restart the runner container through systemd and support replacing instances when the container remains
-stopped. The health checks report whether the container is running; they do not test Tilebox API connectivity or task
+AWS and GCP default their boot volume to 40 GiB, expose `root_volume_size_gb`, and delete the volume with the instance.
+Their health checks report whether the Docker container is running. They do not test Tilebox connectivity or task
 execution.
 
-AWS checks the container once per minute after startup. After ten consecutive failures, the instance marks itself
-unhealthy so the Auto Scaling Group can replace it.
+AWS instances report persistent container failures to their own Auto Scaling Group. GCP exposes an HTTP endpoint on
+port 8080 only to Google Cloud's documented health-check ranges. GCP automatic healing is disabled by default: fleets
+must first roll completely onto a health-capable template, then enable healing in a separate deployment after every
+instance reports healthy.
 
-GCP exposes a health endpoint on port 8080 to Google Cloud health-check probes. Automatic MIG healing is disabled by
-default to make upgrades safe. Roll out GCP self-healing in two deployments:
+## CREODIAS deployment order
 
-1. Deploy with `auto_healing_enabled=False`, wait for every instance to use the new template, and verify the health
-   check reports all instances healthy.
-2. Set `auto_healing_enabled=True` and deploy again to attach the auto-healing policy.
+CREODIAS uses two root configurations and two independent states:
 
-For Shared VPC deployments, pass both `health_check_network` and `health_check_network_project` so the firewall rule is
-created in the host project.
+1. Apply [`examples/creodias/cluster`](examples/creodias/cluster) to create the managed cluster and worker pool.
+2. Store its sensitive `kubeconfig` output outside Terraform remote state sharing, then apply
+   [`examples/creodias/runner`](examples/creodias/runner) against the cluster.
 
-## Development
+Destroy in the reverse order: runner first, then cluster. This prevents Terraform from trying to configure Kubernetes
+through a cluster created during the same plan and prevents a destroyed cluster from stranding Kubernetes resources in
+state.
 
-```bash
-uv sync
-pre-commit install
+The runner HPA scales pods by CPU. Required one-runner-per-host anti-affinity leaves additional pods Pending, and the
+CloudFerro cluster autoscaler responds by adding worker VMs. The Kubernetes Metrics API must be available for HPA.
+CloudFerro does not document scale-to-zero, so the minimum runner/worker count is one and the managed control plane
+remains allocated.
+
+CloudFerro's provider is not mirrored by the OpenTofu registry. The CREODIAS module and example therefore retain this
+exact, fully qualified requirement:
+
+```hcl
+source  = "registry.terraform.io/CloudFerro/cloudferro"
+version = "= 0.1.3"
 ```
 
-Run the repository checks before submitting changes:
+Configure the provider in the root module with `CLOUDFERRO_TOKEN` or its `token` argument. Child modules intentionally
+inherit provider configurations from their callers.
+
+## State and secrets
+
+Treat every state file as sensitive and use an encrypted remote backend with narrowly scoped access:
+
+- CREODIAS cluster state contains the sensitive kubeconfig.
+- The Kubernetes runner state contains the runner environment, including `TILEBOX_API_KEY`.
+- The disposable greenfield examples create secret versions, so their API-key values enter state.
+- AWS and GCP existing-infrastructure examples pass only existing secret identifiers to their runner modules.
+
+Never commit real `.tfvars`, state, plans, kubeconfigs, or credentials. The sample variable files contain placeholders
+and are safe to copy before filling in locally.
+
+## Compatibility and development
+
+Modules require Terraform or OpenTofu 1.5 or newer. Provider constraints are documented in each module's
+`versions.tf`; the CloudFerro provider is intentionally pinned exactly as described above.
+
+Run formatting and validation before submitting changes:
 
 ```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run pyright .
-uv lock --check
+tofu fmt -check -recursive .
+
+find modules examples -name versions.tf -print | while read -r file; do
+  directory=${file%/versions.tf}
+  tofu -chdir="$directory" init -backend=false -input=false
+  tofu -chdir="$directory" validate
+  rm -rf "$directory/.terraform" "$directory/.terraform.lock.hcl"
+done
 ```
+
+Run the same commands with `terraform` to verify both engines.

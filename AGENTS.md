@@ -2,44 +2,58 @@
 
 ## Project overview
 
-Tilebox IaC is a Python Pulumi library for autoscaling Tilebox runner clusters on AWS and GCP. Cloud-specific
-components live under `tilebox_iac/aws` and `tilebox_iac/gcp`.
+Tilebox IaC provides Terraform/OpenTofu modules for autoscaling Tilebox runner clusters on AWS, GCP, and CREODIAS.
+Provider-specific modules live under `modules/`; deployable examples live under `examples/`.
+
+## Module boundaries
+
+- Keep reusable modules existing-infrastructure-first. AWS consumes subnet IDs; GCP consumes project, network, and
+  subnetwork inputs; CREODIAS consumes optional shared network IDs.
+- Do not add VPC, subnet, NAT, project, organization, or broad landing-zone ownership to reusable modules.
+- Greenfield infrastructure belongs only in clearly marked disposable examples that call the same core modules.
+- Configure providers in root configurations. Child modules declare requirements and inherit provider configurations.
+- Keep cloud-provider and Kubernetes resources for CREODIAS in separate modules and states. Apply cluster then runner;
+  destroy runner then cluster. Do not pass kubeconfig through `terraform_remote_state`.
+- Keep `registry.terraform.io/CloudFerro/cloudferro` pinned exactly to `0.1.3`; it is not mirrored by OpenTofu.
 
 ## Shared runner contract
 
 - Keep `ghcr.io/tilebox/runner:latest` as the built-in image for every provider.
-- Consume the official image anonymously. Do not add image builders, publishing, or registry resources to this library.
+- Consume the official image anonymously. Do not add image builders, publishing, or registry resources.
 - Allow callers to supply a prebuilt image through `runner_image` and use provider-native authentication for private
-  ECR, GCR, or Artifact Registry images.
+  ECR, GCR, Artifact Registry, or Kubernetes registry images.
 - Require `TILEBOX_API_KEY`. Treat `TILEBOX_CLUSTER` as optional so the account's default cluster remains usable.
 - Pass additional runner settings through `environment_variables`; do not add provider-specific runner commands.
-- Default root volumes to 40 GiB, keep the size configurable through `root_volume_size_gb`, and delete boot volumes
-  with their instances.
-- Keep cloud-init templates responsible for pulling and starting the image. The image entrypoint owns the runner
-  command and lifecycle.
+- Default AWS and GCP boot volumes to 40 GiB, keep the size configurable through `root_volume_size_gb`, and delete boot
+  volumes with their instances.
+- Keep startup templates responsible for pulling and starting the image. The image entrypoint owns runner lifecycle.
 
 ## Reliability contract
 
-- AWS instances self-report persistent container failures to their Auto Scaling Group. Keep the IAM permission scoped
-  to the component's ASG name and account, region, and partition.
-- GCP uses a regional HTTP health check on port 8080. Restrict both VPC and COS guest-firewall access to Google Cloud's
+- Keep AWS `autoscaling:SetInstanceHealth` permission scoped to the module's ASG name, account, region, and partition.
+- GCP uses a regional HTTP health check on port 8080. Restrict both VPC and COS guest-firewall access to Google's
   documented health-check ranges.
-- GCP automatic healing must remain opt-in by default. Existing fleets first need a complete template rollout with
-  `auto_healing_enabled=False`; enable healing in a separate deployment only after all instances report healthy.
-- Health checks currently test whether the Docker container is running. Do not describe them as application-liveness
-  or Tilebox-connectivity checks.
-- Container-Optimized OS mounts `/usr` read-only and generic `/var` and `/tmp` as non-executable. Put executable
-  cloud-init helpers under `/etc` and recreate stateless configuration on every boot.
+- Do not add GCP automatic healing to an existing fleet in the same rollout as the health-capable template. A safe
+  healing design must remain separately staged and opt-in.
+- AWS and GCP health checks only test whether the Docker container is running. Do not describe them as application
+  liveness, Tilebox connectivity, or task execution checks.
+- Container-Optimized OS mounts `/usr` read-only and generic `/var` and `/tmp` as non-executable. Put executable startup
+  helpers under `/etc` and recreate stateless configuration on every boot.
+- Preserve the CREODIAS runner's required one-pod-per-host anti-affinity, dedicated runner pool label/taint, zero-surge
+  rollout, HPA scale-down stabilization, and disabled service-account token.
 
-## Scope
+## State and secrets
 
-AWS and GCP are the supported providers on `main`. Azure support is deferred and should be developed separately rather
-than mixed into AWS/GCP changes.
+- Treat kubeconfig, Kubernetes Secret values, plans, variable files, and state as sensitive.
+- Existing-infrastructure AWS and GCP modules should consume secret identifiers and fetch values at runtime.
+- Keep prominent warnings on greenfield examples because their managed secret payloads enter state.
+- Never add real credentials, `.tfvars`, plans, state, or kubeconfigs to the repository.
 
 ## Development
 
-- Install dependencies with `uv sync`.
-- Run `uv run ruff check .`, `uv run ruff format --check .`, `uv run pyright .`, and `uv lock --check` before merging.
-- Follow the existing `ComponentResource`, `TypedDict`, and Jinja2 cloud-init patterns.
-- Prefer provider-explicit resources and provider-inheriting invokes so aliased providers and explicit projects work.
-- Keep changes provider-local unless they intentionally update the shared contract in `tilebox_iac/release_runner.py`.
+- Support Terraform and OpenTofu 1.5 or newer.
+- Run `terraform fmt -check -recursive .` and `tofu fmt -check -recursive .`.
+- Run `init -backend=false -input=false` and `validate` with both engines in every module and example root containing a
+  `versions.tf` file.
+- Remove generated `.terraform` directories and `.terraform.lock.hcl` files after local validation.
+- Keep changes provider-local unless they intentionally update the shared runner contract.

@@ -6,25 +6,46 @@ on:
   pull_request:
     branches: ["**"]
 
+permissions:
+  contents: read
+
 jobs:
-  code-quality:
-    name: Check coding standards
-    permissions:
-      contents: read
+  validate:
+    name: Validate with ${{ matrix.engine }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [terraform, tofu]
+
     steps:
       - uses: actions/checkout@v4
-      - name: Set up uv
-        # Install latest uv version using the installer
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: "Set up Python"
-        # run: uv python install  # this would also work, but the setup-python action can be faster due to caching
-        uses: actions/setup-python@v5
+
+      - name: Set up Terraform
+        if: matrix.engine == 'terraform'
+        uses: hashicorp/setup-terraform@v4
         with:
-          python-version: "3.10"
-      - name: Install the project
-        run: uv sync --all-extras --dev
-      - name: Ruff
-        run: uv run ruff format --check . && uv run ruff check .
-      - name: Pyright
-        run: uv run pyright .
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+
+      - name: Set up OpenTofu
+        if: matrix.engine == 'tofu'
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: 1.12.5
+          tofu_wrapper: false
+
+      - name: Check formatting
+        run: ${{ matrix.engine }} fmt -check -recursive .
+
+      - name: Initialize and validate every root
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r versions_file; do
+            directory=${versions_file%/versions.tf}
+            echo "Validating ${directory}"
+            ${{ matrix.engine }} -chdir="${directory}" init -backend=false -input=false
+            ${{ matrix.engine }} -chdir="${directory}" validate
+            rm -rf "${directory}/.terraform" "${directory}/.terraform.lock.hcl"
+          done < <(find modules examples -name versions.tf -print | sort)
