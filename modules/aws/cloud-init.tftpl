@@ -1,0 +1,134 @@
+#cloud-config
+# Secret rollout markers: %{ for name, secret in secret_environment_variables ~}${name}=${secret.rollout_marker} %{ endfor }
+
+packages:
+  - docker
+  - awscli
+
+write_files:
+- path: /tmp/environment.env
+  permissions: '0600'
+  owner: root
+  encoding: b64
+  content: "${environment_file}"
+
+- path: /tmp/fetch-secrets.sh
+  permissions: '0755'
+  owner: root
+  content: |
+    #!/bin/bash
+    set -euo pipefail
+    OUTPUT_FILE="$${1:-/tmp/secrets.env}"
+    : > "$${OUTPUT_FILE}"
+%{ if length(secret_environment_variables) > 0 ~}
+    TOKEN=$(curl --fail --silent --show-error -X PUT \
+      "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    REGION=$(curl --fail --silent --show-error \
+      -H "X-aws-ec2-metadata-token: $${TOKEN}" \
+      http://169.254.169.254/latest/meta-data/placement/region)
+%{ for name, secret in secret_environment_variables ~}
+    SECRET_VALUE=$(aws secretsmanager get-secret-value \
+      --region "$${REGION}" \
+      --secret-id "${secret.secret_arn}" \
+      --query SecretString \
+      --output text)
+    if [[ "$${SECRET_VALUE}" == *$'\r'* || "$${SECRET_VALUE}" == *$'\n'* ]]; then
+      echo "Secret value for ${name} contains an unsupported newline" >&2
+      exit 1
+    fi
+    printf '%s=%s\n' "${name}" "$${SECRET_VALUE}" >> "$${OUTPUT_FILE}"
+%{ endfor ~}
+%{ endif ~}
+    chmod 600 "$${OUTPUT_FILE}"
+
+- path: /usr/local/bin/cloudservice-health
+  permissions: '0755'
+  owner: root
+  content: |
+    #!/bin/bash
+    set -euo pipefail
+
+    FAILURE_FILE=/run/cloudservice-health-failures
+    if [ "$(docker inspect --format '{{.State.Running}}' cloudservice 2>/dev/null || true)" = "true" ]; then
+      rm -f "$${FAILURE_FILE}"
+      exit 0
+    fi
+
+    failures=$(cat "$${FAILURE_FILE}" 2>/dev/null || echo 0)
+    failures=$((failures + 1))
+    printf '%s\n' "$${failures}" > "$${FAILURE_FILE}"
+    if [ "$${failures}" -lt 10 ]; then
+      exit 0
+    fi
+
+    TOKEN=$(curl --fail --silent --show-error -X PUT \
+      "http://169.254.169.254/latest/api/token" \
+      -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+    INSTANCE_ID=$(curl --fail --silent --show-error \
+      -H "X-aws-ec2-metadata-token: $${TOKEN}" \
+      http://169.254.169.254/latest/meta-data/instance-id)
+    REGION=$(curl --fail --silent --show-error \
+      -H "X-aws-ec2-metadata-token: $${TOKEN}" \
+      http://169.254.169.254/latest/meta-data/placement/region)
+    aws autoscaling set-instance-health \
+      --region "$${REGION}" \
+      --instance-id "$${INSTANCE_ID}" \
+      --health-status Unhealthy \
+      --should-respect-grace-period
+
+- path: /etc/systemd/system/cloudservice.service
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Tilebox Workflow Runner
+    After=docker.service
+    Requires=docker.service
+
+    [Service]
+    Type=simple
+    Restart=always
+    RestartSec=5
+    ExecStartPre=/tmp/fetch-secrets.sh /tmp/secrets.env
+%{ if ecr_region != "" ~}
+    ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region ${ecr_region} | docker login --username AWS --password-stdin ${registry_hostname}'
+%{ endif ~}
+    ExecStartPre=/usr/bin/docker pull ${container_image}
+    ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /tmp/environment.env --env-file /tmp/secrets.env ${container_image}
+    ExecStop=-/usr/bin/docker stop cloudservice
+
+    [Install]
+    WantedBy=multi-user.target
+
+- path: /etc/systemd/system/cloudservice-health.service
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Check Tilebox Workflow Runner Health
+    After=cloudservice.service
+
+    [Service]
+    Type=oneshot
+    ExecStart=/usr/local/bin/cloudservice-health
+
+- path: /etc/systemd/system/cloudservice-health.timer
+  permissions: '0644'
+  owner: root
+  content: |
+    [Unit]
+    Description=Periodically Check Tilebox Workflow Runner Health
+
+    [Timer]
+    OnBootSec=5min
+    OnUnitActiveSec=1min
+
+    [Install]
+    WantedBy=timers.target
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now docker.service
+  - systemctl enable --now cloudservice.service
+  - systemctl enable --now cloudservice-health.timer
