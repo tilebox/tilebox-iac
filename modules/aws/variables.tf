@@ -168,6 +168,20 @@ variable "additional_secret_arns" {
   }
 }
 
+variable "secret_kms_key_arns" {
+  description = "Customer-managed KMS key ARNs needed to decrypt configured Secrets Manager secrets. The key policies must also permit the runner role."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for arn in var.secret_kms_key_arns :
+      can(regex("^arn:[^:]+:kms:[^:]+:[0-9]{12}:key/[^[:space:]]+$", arn))
+    ])
+    error_message = "secret_kms_key_arns must contain KMS key ARNs without whitespace."
+  }
+}
+
 variable "tags" {
   description = "Additional tags for module-owned AWS resources. The module's Name tag takes precedence."
   type        = map(string)

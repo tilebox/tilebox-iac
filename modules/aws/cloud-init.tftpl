@@ -6,19 +6,20 @@ packages:
   - awscli
 
 write_files:
-- path: /tmp/environment.env
+- path: /etc/tilebox/environment.env
   permissions: '0600'
   owner: root
   encoding: b64
   content: "${environment_file}"
 
-- path: /tmp/fetch-secrets.sh
-  permissions: '0755'
+- path: /etc/tilebox/fetch-secrets
+  permissions: '0700'
   owner: root
   content: |
     #!/bin/bash
     set -euo pipefail
-    OUTPUT_FILE="$${1:-/tmp/secrets.env}"
+    OUTPUT_FILE="$${1:-/run/tilebox/secrets.env}"
+    install -d -m 0700 "$(dirname "$${OUTPUT_FILE}")"
     : > "$${OUTPUT_FILE}"
 %{ if length(secret_environment_variables) > 0 ~}
     TOKEN=$(curl --fail --silent --show-error -X PUT \
@@ -90,12 +91,14 @@ write_files:
     Type=simple
     Restart=always
     RestartSec=5
-    ExecStartPre=/tmp/fetch-secrets.sh /tmp/secrets.env
+    RuntimeDirectory=tilebox
+    RuntimeDirectoryMode=0700
+    ExecStartPre=/etc/tilebox/fetch-secrets /run/tilebox/secrets.env
 %{ if ecr_region != "" ~}
     ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region ${ecr_region} | docker login --username AWS --password-stdin ${registry_hostname}'
 %{ endif ~}
     ExecStartPre=/usr/bin/docker pull ${container_image}
-    ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /tmp/environment.env --env-file /tmp/secrets.env ${container_image}
+    ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /etc/tilebox/environment.env --env-file /run/tilebox/secrets.env ${container_image}
     ExecStop=-/usr/bin/docker stop cloudservice
 
     [Install]

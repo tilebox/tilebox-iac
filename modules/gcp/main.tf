@@ -5,9 +5,6 @@ locals {
     google_service_account.runner[0].email
   ) : var.service_account_email
 
-  effective_min_replicas = var.enabled ? var.min_replicas : 0
-  effective_max_replicas = var.enabled ? var.max_replicas : 0
-
   health_check_network            = coalesce(var.health_check_network_self_link, var.network_self_link)
   health_check_network_project_id = coalesce(var.health_check_network_project_id, var.project_id)
 
@@ -25,6 +22,11 @@ locals {
   secret_resource_names = {
     for name, secret in var.secret_environment_variables :
     name => "projects/${secret.project_id}/secrets/${secret.secret_id}"
+  }
+
+  secret_iam_grants = {
+    for secret in toset(values(var.secret_environment_variables)) :
+    "projects/${secret.project_id}/secrets/${secret.secret_id}" => secret
   }
 
   resource_labels = merge(var.labels, {
@@ -66,7 +68,7 @@ resource "google_project_iam_member" "monitoring" {
 }
 
 resource "google_secret_manager_secret_iam_member" "runner" {
-  for_each = var.secret_environment_variables
+  for_each = local.secret_iam_grants
 
   project   = each.value.project_id
   secret_id = each.value.secret_id
@@ -191,6 +193,7 @@ resource "google_compute_region_instance_group_manager" "runner" {
   region             = var.region
   name               = "${var.name}-mig"
   base_instance_name = var.name
+  target_size        = var.enabled ? null : 0
 
   version {
     name              = "primary"
@@ -216,16 +219,18 @@ resource "google_compute_region_instance_group_manager" "runner" {
 }
 
 resource "google_compute_region_autoscaler" "runner" {
+  count = var.enabled ? 1 : 0
+
   project = var.project_id
   region  = var.region
   name    = "${var.name}-autoscaler"
   target  = google_compute_region_instance_group_manager.runner.id
 
   autoscaling_policy {
-    min_replicas    = local.effective_min_replicas
-    max_replicas    = local.effective_max_replicas
+    min_replicas    = var.min_replicas
+    max_replicas    = var.max_replicas
     cooldown_period = 60
-    mode            = var.enabled ? "ON" : "OFF"
+    mode            = "ON"
 
     cpu_utilization {
       target = var.cpu_target

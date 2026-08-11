@@ -15,6 +15,7 @@ module "runner" {
 
   iam_role_name         = var.iam_role_name
   instance_profile_name = var.instance_profile_name
+  secret_kms_key_arns   = var.secret_kms_key_arns
 
   environment_variables = var.environment_variables
   secret_environment_variables = {

@@ -64,6 +64,12 @@ variable "tilebox_api_key_rollout_marker" {
   default     = ""
 }
 
+variable "secret_kms_key_arns" {
+  description = "Customer-managed KMS key ARNs needed to decrypt the configured secret, if any."
+  type        = set(string)
+  default     = []
+}
+
 variable "environment_variables" {
   description = "Additional non-secret runner environment variables, such as TILEBOX_CLUSTER."
   type        = map(string)

@@ -3,8 +3,8 @@ variable "name" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$", var.name))
-    error_message = "name must be a lowercase GCP-compatible name of at most 63 characters."
+    condition     = can(regex("^[a-z](?:[a-z0-9-]{0,48}[a-z0-9])?$", var.name))
+    error_message = "name must be a lowercase GCP-compatible prefix of at most 50 characters so generated resource names stay within GCP's 63-character limit."
   }
 }
 
@@ -52,12 +52,22 @@ variable "health_check_network_self_link" {
   description = "Optional network self-link for the health-check firewall. Defaults to network_self_link."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.health_check_network_self_link == null || length(trimspace(var.health_check_network_self_link)) > 0
+    error_message = "health_check_network_self_link must be null or non-empty."
+  }
 }
 
 variable "health_check_network_project_id" {
   description = "Optional project that owns the health-check network. Set this to the host project for Shared VPC."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.health_check_network_project_id == null || length(trimspace(var.health_check_network_project_id)) > 0
+    error_message = "health_check_network_project_id must be null or non-empty."
+  }
 }
 
 variable "machine_type" {
@@ -71,7 +81,7 @@ variable "machine_type" {
 }
 
 variable "enabled" {
-  description = "Whether runners are enabled. Disabled clusters keep infrastructure but turn the autoscaler off with zero bounds."
+  description = "Whether runners are enabled. Disabled clusters keep their compute infrastructure, remove the autoscaler, and resize the managed instance group to zero."
   type        = bool
   default     = true
 }

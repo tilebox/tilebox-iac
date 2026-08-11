@@ -1,7 +1,5 @@
 data "aws_partition" "current" {}
 
-data "aws_region" "current" {}
-
 data "aws_caller_identity" "current" {}
 
 data "aws_ami" "runner" {
@@ -48,7 +46,8 @@ locals {
     toset([for secret in values(var.secret_environment_variables) : secret.secret_arn]),
   )
 
-  asg_arn = "arn:${data.aws_partition.current.partition}:autoscaling:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:autoScalingGroup:*:autoScalingGroupName/${var.name}"
+  region  = split(":", aws_launch_template.runner.arn)[3]
+  asg_arn = "arn:${data.aws_partition.current.partition}:autoscaling:${local.region}:${data.aws_caller_identity.current.account_id}:autoScalingGroup:*:autoScalingGroupName/${var.name}"
 
   resource_tags = merge(var.tags, {
     Name = "${var.name}-instance"
@@ -123,6 +122,25 @@ data "aws_iam_policy_document" "secrets" {
     ]
     resources = sort(tolist(local.secret_arns))
   }
+
+  dynamic "statement" {
+    for_each = length(var.secret_kms_key_arns) > 0 ? [1] : []
+
+    content {
+      sid       = "DecryptRunnerSecrets"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = sort(tolist(var.secret_kms_key_arns))
+
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values = [
+          "secretsmanager.${local.region}.${data.aws_partition.current.dns_suffix}",
+        ]
+      }
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "secrets" {
@@ -178,11 +196,6 @@ resource "aws_launch_template" "runner" {
   }
 
   tags = var.tags
-
-  depends_on = [
-    aws_iam_role_policy.instance_health,
-    aws_iam_role_policy.secrets,
-  ]
 
   lifecycle {
     precondition {
@@ -250,6 +263,11 @@ resource "aws_autoscaling_group" "runner" {
       propagate_at_launch = true
     }
   }
+
+  depends_on = [
+    aws_iam_role_policy.instance_health,
+    aws_iam_role_policy.secrets,
+  ]
 
   lifecycle {
     ignore_changes = [desired_capacity]

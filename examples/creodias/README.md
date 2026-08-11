@@ -11,6 +11,9 @@ already exists.
    export CLOUDFERRO_TOKEN='replace-with-your-token'
    ```
 
+   When using the provider's explicit `host` input, also unset `CLOUDFERRO_REGION`; an environment-provided region and
+   an explicit host are mutually exclusive.
+
 2. Initialize and apply the cluster root:
 
    ```bash

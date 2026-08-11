@@ -4,6 +4,9 @@ subnet_ids = ["subnet-0123456789abcdef0", "subnet-0fedcba9876543210"]
 tilebox_api_key_secret_arn    = "arn:aws:secretsmanager:eu-west-1:123456789012:secret:tilebox-api-key-example"
 tilebox_api_key_rollout_marker = "replace-with-the-current-secret-version-id"
 
+# Required only when the secret uses a customer-managed KMS key.
+secret_kms_key_arns = []
+
 environment_variables = {
   TILEBOX_CLUSTER = "replace-with-an-optional-cluster-slug"
 }

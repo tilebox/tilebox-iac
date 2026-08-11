@@ -27,7 +27,8 @@ permissions.
 `TILEBOX_API_KEY` is required in exactly one of `environment_variables` or `secret_environment_variables`.
 Secret references are preferred: the VM fetches the latest SecretString on every systemd service start. Set
 `rollout_marker` to a secret version ID when a rotation should create a new launch-template version and refresh the
-fleet.
+fleet. For secrets encrypted with customer-managed KMS keys, pass the key ARNs through `secret_kms_key_arns` and ensure
+their key policies permit the runner role. The module grants scoped `kms:Decrypt` through Secrets Manager only.
 
 Plain environment values are embedded in EC2 user data and Terraform/OpenTofu state. Marking an input sensitive only
 redacts CLI output; it does not remove data from state. Protect state accordingly.

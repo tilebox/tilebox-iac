@@ -48,7 +48,8 @@ The VPC firewall and COS guest firewall both allow port 8080 only from `130.211.
 - Existing networking must provide outbound access to the configured registry, Google APIs, and Tilebox. No external
   IP is attached by default.
 - CPU autoscaling cannot scale from zero, so `min_replicas` must be at least one while enabled.
-- Disabled mode turns the autoscaler off with zero min/max bounds; the module does not claim CPU scale-from-zero.
+- Disabled mode removes the autoscaler and explicitly resizes the managed instance group to zero. Re-enabling creates
+  the autoscaler again with a positive minimum; the module does not claim CPU scale-from-zero.
 - GCR and Artifact Registry images use `docker-credential-gcr`; the runner service account still needs pull access.
 - Executable COS helpers live under `/etc` because `/usr` is read-only and generic `/var` and `/tmp` mounts are
   non-executable.

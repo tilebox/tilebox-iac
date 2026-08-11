@@ -24,8 +24,8 @@ output "instance_group" {
 }
 
 output "autoscaler_id" {
-  description = "ID of the regional CPU autoscaler."
-  value       = google_compute_region_autoscaler.runner.id
+  description = "ID of the regional CPU autoscaler, or null while runners are disabled."
+  value       = try(google_compute_region_autoscaler.runner[0].id, null)
 }
 
 output "health_check_id" {

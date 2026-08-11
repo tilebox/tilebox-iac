@@ -43,8 +43,7 @@ variable "environment_variables" {
 
   validation {
     condition = (
-      contains(keys(var.environment_variables), "TILEBOX_API_KEY") &&
-      length(var.environment_variables["TILEBOX_API_KEY"]) > 0 &&
+      try(length(var.environment_variables["TILEBOX_API_KEY"]) > 0, false) &&
       alltrue([
         for name, value in var.environment_variables :
         can(regex("^[A-Za-z_][A-Za-z0-9_]*$", name)) &&
