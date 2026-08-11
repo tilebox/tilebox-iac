@@ -4,7 +4,7 @@ provider "google" {
 }
 
 module "runner" {
-  source = "../../../modules/gcp"
+  source = "../../../modules/gcp-runner"
 
   name                 = var.name
   project_id           = var.project_id

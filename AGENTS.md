@@ -7,10 +7,13 @@ Provider-specific modules live under `modules/`; deployable examples live under 
 
 ## Module boundaries
 
-- Keep reusable modules existing-infrastructure-first. AWS consumes subnet IDs; GCP consumes project, network, and
-  subnetwork inputs; CREODIAS consumes optional shared network IDs.
-- Do not add VPC, subnet, NAT, project, organization, or broad landing-zone ownership to reusable modules.
-- Greenfield infrastructure belongs only in clearly marked disposable examples that call the same core modules.
+- Keep the high-level AWS and GCP modules optimized for trivial adoption. They create minimal networking and managed
+  secrets, then compose the corresponding low-level runner module.
+- Keep low-level runner modules existing-infrastructure-first. AWS consumes subnet IDs; GCP consumes project, network,
+  and subnetwork inputs; CREODIAS consumes optional shared network IDs.
+- Do not add project, organization, or broad landing-zone ownership. The high-level modules own only the minimal
+  provider-local infrastructure required by their runner fleet.
+- Quickstart examples should remain thin roots that call the same high-level modules users call directly.
 - Configure providers in root configurations. Child modules declare requirements and inherit provider configurations.
 - Keep cloud-provider and Kubernetes resources for CREODIAS in separate modules and states. Apply cluster then runner;
   destroy runner then cluster. Do not pass kubeconfig through `terraform_remote_state`.
@@ -45,7 +48,7 @@ Provider-specific modules live under `modules/`; deployable examples live under 
 
 - Treat kubeconfig, Kubernetes Secret values, plans, variable files, and state as sensitive.
 - Existing-infrastructure AWS and GCP modules should consume secret identifiers and fetch values at runtime.
-- Keep prominent warnings on greenfield examples because their managed secret payloads enter state.
+- Note that high-level-module secret payloads enter state, without overwhelming the quickstart documentation.
 - Never add real credentials, `.tfvars`, plans, state, or kubeconfigs to the repository.
 
 ## Development

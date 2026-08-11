@@ -1,5 +1,0 @@
-region = "eu-west-1"
-
-environment_variables = {
-  TILEBOX_CLUSTER = "replace-with-an-optional-cluster-slug"
-}

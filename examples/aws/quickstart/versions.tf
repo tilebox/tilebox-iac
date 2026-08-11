@@ -1,3 +1,4 @@
+# Provider requirements for the standalone AWS quickstart root.
 terraform {
   required_version = ">= 1.5.0"
 

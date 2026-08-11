@@ -3,39 +3,79 @@
 Terraform and OpenTofu modules for autoscaling [Tilebox](https://tilebox.com/) runner clusters on AWS, Google Cloud,
 and CREODIAS (CloudFerro Managed Kubernetes).
 
-The modules are designed to fit into an existing environment. AWS consumes subnet IDs, GCP consumes an existing
-project/network/subnetwork, and CREODIAS consumes optional shared network IDs. They do not create or take ownership of
-a customer's landing zone. Small greenfield examples are included for evaluation and disposable deployments only.
+Most users should call the high-level AWS or GCP module. Each creates the minimal networking, managed API-key secret,
+and autoscaling runner fleet needed inside the caller's cloud account. Advanced users can call the corresponding
+low-level runner module to use customer-owned networking and secrets instead.
 
 ## Modules
 
-| Module | Creates | Existing infrastructure it consumes |
+| Module | Layer | Creates or consumes |
 | --- | --- | --- |
-| [`modules/aws`](modules/aws) | Spot EC2 Auto Scaling Group, launch template, autoscaler, and optional workload identity | Subnets and optional security groups |
-| [`modules/gcp`](modules/gcp) | Spot regional MIG, instance template, autoscaler, health check, and optional workload identity | Project, VPC network, and regional subnetwork |
-| [`modules/creodias`](modules/creodias) | CloudFerro Managed Kubernetes cluster and autoscaled runner worker pool | Optional shared OpenStack network IDs |
-| [`modules/kubernetes-runner`](modules/kubernetes-runner) | Runner Deployment, Secret, ServiceAccount, and HPA | An existing Kubernetes cluster and provider configuration |
+| [`modules/aws`](modules/aws) | High-level default | Minimal VPC, public subnets, managed secret, and Spot runner fleet |
+| [`modules/aws-runner`](modules/aws-runner) | Low-level | Runner fleet using existing subnets, security groups, and secret identifiers |
+| [`modules/gcp`](modules/gcp) | High-level default | APIs, minimal VPC/NAT, managed secret, and auto-healed Spot runner fleet inside an existing project |
+| [`modules/gcp-runner`](modules/gcp-runner) | Low-level | Runner fleet using an existing project, VPC, subnetwork, and secret identifiers |
+| [`modules/creodias`](modules/creodias) | Cluster | CloudFerro Managed Kubernetes cluster and autoscaled runner worker pool, optionally using shared network IDs |
+| [`modules/kubernetes-runner`](modules/kubernetes-runner) | Workload | Runner Deployment, Secret, ServiceAccount, and HPA on an existing Kubernetes cluster |
 
 Every provider uses `ghcr.io/tilebox/runner:latest` by default. The image is pulled anonymously and this repository
 does not build, publish, or mirror it. Set `runner_image` to use a prebuilt custom image and configure the provider's
 native registry authentication and workload permissions separately.
 
-## Get started
+## Quickstart
 
-Start with the example matching your environment:
+AWS requires configured provider credentials and a Tilebox API key. The complete module call is:
+
+```hcl
+module "tilebox" {
+  source          = "git::https://github.com/tilebox/tilebox-iac.git//modules/aws?ref=v0.1.0"
+  tilebox_api_key = var.tilebox_api_key
+}
+```
+
+The ready-to-run example wraps that call with an AWS provider:
+
+```bash
+cd examples/aws/quickstart
+export TF_VAR_tilebox_api_key='replace-with-your-api-key'
+tofu init
+tofu apply
+```
+
+Google Cloud additionally needs the ID of an existing project with billing enabled:
+
+```hcl
+module "tilebox" {
+  source          = "git::https://github.com/tilebox/tilebox-iac.git//modules/gcp?ref=v0.1.0"
+  project_id      = "my-project"
+  tilebox_api_key = var.tilebox_api_key
+}
+```
+
+The ready-to-run example is applied the same way:
+
+```bash
+cd examples/gcp/quickstart
+export TF_VAR_project_id='replace-with-your-project-id'
+export TF_VAR_tilebox_api_key='replace-with-your-api-key'
+tofu init && tofu apply
+```
+
+Both high-level modules create intentionally minimal infrastructure rather than production landing zones. Each stack
+is created by one `terraform apply` or `tofu apply`.
+
+For production integration into customer-owned networking and secrets, start with:
 
 - [AWS with existing infrastructure](examples/aws/existing-infrastructure)
 - [GCP with existing infrastructure](examples/gcp/existing-infrastructure)
 - [CREODIAS cluster and runner](examples/creodias)
-- [Disposable AWS greenfield example](examples/aws/greenfield)
-- [Disposable GCP greenfield example](examples/gcp/greenfield)
 
 Copy an example into your own root configuration, replace its local module source with a pinned release or commit,
 and configure a remote backend. For example:
 
 ```hcl
 module "runner" {
-  source = "git::https://github.com/tilebox/tilebox-iac.git//modules/aws?ref=<release-or-commit>"
+  source = "git::https://github.com/tilebox/tilebox-iac.git//modules/aws-runner?ref=<release-or-commit>"
 
   # See examples/aws/existing-infrastructure for the required inputs.
 }
@@ -54,9 +94,10 @@ file. This multi-root module repository does not commit generated lock files.
 
 ## Runner configuration
 
-`TILEBOX_API_KEY` is required. AWS and GCP receive a reference to an existing Secrets Manager or Secret Manager
-secret, respectively, and fetch its latest value at boot. `TILEBOX_CLUSTER` is optional; omitting it uses the Tilebox
-account's default cluster. Add other runner settings through `environment_variables`.
+`TILEBOX_API_KEY` is required. The high-level modules create its cloud secret; the low-level modules accept references
+to existing Secrets Manager or Secret Manager secrets. Runner instances fetch the secret value at boot.
+`TILEBOX_CLUSTER` is optional; omitting it uses the Tilebox account's default cluster. Add it and other runner settings
+through `environment_variables`.
 
 AWS and GCP default their boot volume to 40 GiB, expose `root_volume_size_gb`, and delete the volume with the instance.
 Their health checks report whether the Docker container is running. They do not test Tilebox connectivity or task
@@ -97,9 +138,10 @@ inherit provider configurations from their callers.
 
 Treat every state file as sensitive and use an encrypted remote backend with narrowly scoped access:
 
+- The high-level AWS and GCP modules manage the API-key secret payload, so its value enters state. Use the low-level
+  modules with externally managed secrets when stricter secret management is required.
 - CREODIAS cluster state contains the sensitive kubeconfig.
 - The Kubernetes runner state contains the runner environment, including `TILEBOX_API_KEY`.
-- The disposable greenfield examples create secret versions, so their API-key values enter state.
 - AWS and GCP existing-infrastructure examples pass only existing secret identifiers to their runner modules.
 
 Never commit real `.tfvars`, state, plans, kubeconfigs, or credentials. The sample variable files contain placeholders

@@ -1,0 +1,3 @@
+# Supply the API key through TF_VAR_tilebox_api_key.
+project_id = "replace-with-an-existing-evaluation-project"
+region     = "europe-west1"

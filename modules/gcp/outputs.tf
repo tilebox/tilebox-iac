@@ -1,34 +1,24 @@
-output "service_account_email" {
-  description = "Email of the module-created or caller-supplied runner service account."
-  value       = local.service_account_email
-}
-
-output "service_account_id" {
-  description = "ID of the module-created service account, or null when using an existing identity."
-  value       = local.create_service_account ? google_service_account.runner[0].id : null
-}
-
-output "instance_template_id" {
-  description = "ID of the runner instance template."
-  value       = google_compute_instance_template.runner.id
-}
-
-output "instance_group_manager_id" {
-  description = "ID of the regional managed instance group."
-  value       = google_compute_region_instance_group_manager.runner.id
-}
-
 output "instance_group" {
-  description = "Self-link of the managed instance group controlled by the regional manager."
-  value       = google_compute_region_instance_group_manager.runner.instance_group
+  description = "Self-link of the runner managed instance group."
+  value       = module.runner.instance_group
 }
 
-output "autoscaler_id" {
-  description = "ID of the regional CPU autoscaler, or null while runners are disabled."
-  value       = try(google_compute_region_autoscaler.runner[0].id, null)
+output "network_self_link" {
+  description = "Self-link of the module-managed VPC."
+  value       = google_compute_network.runner.self_link
 }
 
-output "health_check_id" {
-  description = "ID of the regional container-state health check."
-  value       = google_compute_region_health_check.runner.id
+output "subnetwork_self_link" {
+  description = "Self-link of the module-managed runner subnetwork."
+  value       = google_compute_subnetwork.runner.self_link
+}
+
+output "runner_service_account_email" {
+  description = "Email of the runner service account."
+  value       = module.runner.service_account_email
+}
+
+output "tilebox_api_key_secret_id" {
+  description = "ID of the module-managed Tilebox API-key secret."
+  value       = google_secret_manager_secret.tilebox_api_key.id
 }

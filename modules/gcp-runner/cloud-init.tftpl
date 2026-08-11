@@ -1,4 +1,6 @@
 #cloud-config
+# Rendered by the low-level GCP runner module.
+# Secret rollout markers: %{ for name, marker in secret_rollout_markers ~}${name}=${marker} %{ endfor }
 
 write_files:
 - path: /etc/tilebox/environment.env
