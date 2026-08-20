@@ -10,6 +10,8 @@ crash.*.log
 *.tfvars
 *.tfvars.json
 *.tfplan
+*kubeconfig*.yaml
+*kubeconfig*.yml
 
 # Local CLI configuration
 .terraformrc

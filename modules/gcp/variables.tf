@@ -13,6 +13,11 @@ variable "name" {
   description = "Name for the Tilebox runner cluster and its infrastructure."
   type        = string
   default     = "tilebox-runners"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.name))
+    error_message = "name must be 6-30 lowercase letters, numbers, or hyphens, start with a letter, and end with a letter or number."
+  }
 }
 
 variable "tilebox_api_key" {

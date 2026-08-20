@@ -71,6 +71,12 @@ variable "tilebox_api_key_secret_id" {
   type        = string
 }
 
+variable "tilebox_api_key_rollout_marker" {
+  description = "Secret version or other marker to replace runner VMs after rotating the Tilebox API key."
+  type        = string
+  default     = ""
+}
+
 variable "environment_variables" {
   description = "Additional non-secret runner environment variables, such as TILEBOX_CLUSTER."
   type        = map(string)

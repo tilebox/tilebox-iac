@@ -6,6 +6,8 @@ subnetwork_self_link = "https://www.googleapis.com/compute/v1/projects/example/r
 
 tilebox_api_key_secret_project_id = "replace-with-your-secret-project"
 tilebox_api_key_secret_id         = "tilebox-api-key"
+# Set this to the current secret version whenever rotation should replace the runner VMs.
+tilebox_api_key_rollout_marker = ""
 
 environment_variables = {
   TILEBOX_CLUSTER = "replace-with-an-optional-cluster-slug"

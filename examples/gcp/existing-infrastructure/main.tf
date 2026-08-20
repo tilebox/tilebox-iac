@@ -23,8 +23,9 @@ module "runner" {
   environment_variables = var.environment_variables
   secret_environment_variables = {
     TILEBOX_API_KEY = {
-      project_id = var.tilebox_api_key_secret_project_id
-      secret_id  = var.tilebox_api_key_secret_id
+      project_id     = var.tilebox_api_key_secret_project_id
+      secret_id      = var.tilebox_api_key_secret_id
+      rollout_marker = var.tilebox_api_key_rollout_marker
     }
   }
 }
