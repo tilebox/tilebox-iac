@@ -61,10 +61,11 @@ export TF_VAR_tilebox_api_key='replace-with-your-api-key'
 tofu init && tofu apply
 ```
 
-Both high-level modules create intentionally minimal infrastructure rather than production landing zones. Each stack
-is created by one `terraform apply` or `tofu apply`.
+Both high-level modules create only the networking, secret, and compute resources required by the runner fleet. They do
+not manage broader account or project networking, security, or organization configuration. Each stack is created by one
+`terraform apply` or `tofu apply`.
 
-For production integration into customer-owned networking and secrets, start with:
+To use customer-owned networking and secrets, start with:
 
 - [AWS with existing infrastructure](examples/aws/existing-infrastructure)
 - [GCP with existing infrastructure](examples/gcp/existing-infrastructure)
@@ -99,7 +100,7 @@ to existing Secrets Manager or Secret Manager secrets. Runner instances fetch th
 `TILEBOX_CLUSTER` is optional; omitting it uses the Tilebox account's default cluster. Add it and other runner settings
 through `environment_variables`.
 
-AWS and GCP default their boot volume to 40 GiB, expose `root_volume_size_gb`, and delete the volume with the instance.
+AWS and GCP default their boot volume to 60 GiB, expose `root_volume_size_gb`, and delete the volume with the instance.
 Their health checks report whether the Docker container is running. They do not test Tilebox connectivity or task
 execution.
 

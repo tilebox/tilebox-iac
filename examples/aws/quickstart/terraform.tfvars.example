@@ -1,2 +1,0 @@
-# Optional region override. Supply the API key through TF_VAR_tilebox_api_key.
-region = "eu-west-1"

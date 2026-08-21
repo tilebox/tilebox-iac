@@ -102,7 +102,7 @@ variable "runner_image" {
 variable "root_volume_size_gb" {
   description = "Root gp3 EBS volume size in GiB. The volume is deleted with the instance."
   type        = number
-  default     = 40
+  default     = 60
 
   validation {
     condition     = var.root_volume_size_gb >= 8 && floor(var.root_volume_size_gb) == var.root_volume_size_gb

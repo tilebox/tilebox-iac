@@ -12,8 +12,8 @@ Provider-specific modules live under `modules/`; deployable examples live under 
 - Keep the nested low-level runner modules (`modules/aws/runner` and `modules/gcp/runner`)
   existing-infrastructure-first. AWS consumes subnet IDs; GCP consumes project, network, and subnetwork inputs;
   CREODIAS consumes optional shared network IDs.
-- Do not add project, organization, or broad landing-zone ownership. The high-level modules own only the minimal
-  provider-local infrastructure required by their runner fleet.
+- Do not add project or organization creation, or manage infrastructure beyond what the runner fleet requires. The
+  high-level modules own only the minimal provider-local infrastructure required by their runner fleet.
 - Quickstart examples should remain thin roots that call the same high-level modules users call directly.
 - Configure providers in root configurations. Child modules declare requirements and inherit provider configurations.
 - Keep cloud-provider and Kubernetes resources for CREODIAS in separate modules and states. Apply cluster then runner;
@@ -28,7 +28,9 @@ Provider-specific modules live under `modules/`; deployable examples live under 
   ECR, GCR, Artifact Registry, or Kubernetes registry images.
 - Require `TILEBOX_API_KEY`. Treat `TILEBOX_CLUSTER` as optional so the account's default cluster remains usable.
 - Pass additional runner settings through `environment_variables`; do not add provider-specific runner commands.
-- Default AWS and GCP boot volumes to 40 GiB, keep the size configurable through `root_volume_size_gb`, and delete boot
+- Use `us-west-2`, the AWS Open Data Sponsorship Program default for geospatial datasets, for AWS region defaults and
+  example values.
+- Default AWS and GCP boot volumes to 60 GiB, keep the size configurable through `root_volume_size_gb`, and delete boot
   volumes with their instances.
 - Keep startup templates responsible for pulling and starting the image. The image entrypoint owns runner lifecycle.
 

@@ -41,6 +41,7 @@ jobs:
       - name: Initialize and validate every root
         shell: bash
         run: |
+          # For each directory containing versions.tf, initialize without its backend, validate it, and delete generated files.
           set -euo pipefail
           while IFS= read -r versions_file; do
             directory=${versions_file%/versions.tf}

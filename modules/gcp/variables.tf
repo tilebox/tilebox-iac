@@ -47,7 +47,7 @@ variable "min_replicas" {
 variable "max_replicas" {
   description = "Maximum number of runners while enabled."
   type        = number
-  default     = 3
+  default     = 10
 }
 
 variable "cpu_target" {
@@ -65,7 +65,7 @@ variable "runner_image" {
 variable "root_volume_size_gb" {
   description = "Runner boot disk size in GiB."
   type        = number
-  default     = 40
+  default     = 60
 }
 
 variable "environment_variables" {

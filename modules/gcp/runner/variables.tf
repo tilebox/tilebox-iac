@@ -132,7 +132,7 @@ variable "runner_image" {
 variable "root_volume_size_gb" {
   description = "Boot disk size in GiB. The disk is deleted with the instance."
   type        = number
-  default     = 40
+  default     = 60
 
   validation {
     condition     = var.root_volume_size_gb >= 10 && floor(var.root_volume_size_gb) == var.root_volume_size_gb

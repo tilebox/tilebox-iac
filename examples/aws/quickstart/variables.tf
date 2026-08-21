@@ -1,7 +1,7 @@
 variable "region" {
   description = "AWS region for the runner cluster."
   type        = string
-  default     = "eu-west-1"
+  default     = "us-west-2"
 }
 
 variable "tilebox_api_key" {

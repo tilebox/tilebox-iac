@@ -2,11 +2,11 @@
 
 This module deploys an autoscaling regional managed instance group of Spot VMs that run the prebuilt Tilebox runner
 image. It consumes an existing project, VPC, and regional subnetwork. It does not create or manage networking, Cloud
-NAT, secrets, APIs, or a customer landing zone.
+NAT, secrets, APIs, or other project-wide infrastructure.
 
 ## What it creates
 
-- a Container-Optimized OS instance template with a 40 GiB auto-deleted boot disk by default;
+- a Container-Optimized OS instance template with a 60 GiB auto-deleted boot disk by default;
 - a regional managed instance group and CPU autoscaler;
 - either a minimal runner service account or required grants for an existing service account;
 - per-secret `roles/secretmanager.secretAccessor` grants and `roles/monitoring.metricWriter`;

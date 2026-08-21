@@ -12,8 +12,8 @@ module "tilebox" {
 ```
 
 Configure the AWS provider in the root or through standard AWS environment variables. Runner instances receive public
-IPv4 addresses but no inbound security-group rules. This is an opinionated starter stack, not a general AWS landing
-zone.
+IPv4 addresses but no inbound security-group rules. The module creates only the listed resources; it does not manage
+broader account networking, security, or organization configuration.
 
 The API key is stored in Secrets Manager and in Terraform/OpenTofu state. Protect the state appropriately. Users with
 stricter networking, state, or secret-management requirements should use [`modules/aws/runner`](runner) with

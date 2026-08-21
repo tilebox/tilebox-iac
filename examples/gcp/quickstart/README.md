@@ -3,10 +3,10 @@
 This primary onboarding path invokes the high-level GCP module, which enables the required APIs in an existing project
 and creates a small VPC, regional subnetwork, Cloud Router/NAT, Secret Manager secret, and autoscaling runner fleet.
 
-It is a minimal stack rather than a production landing zone. It does not create a GCP project, organization IAM,
-Shared VPC, centralized logging, budgets, policy controls, or customer-specific security configuration. API services
-remain enabled after destroy. Use the low-level [`gcp/runner`](../../../modules/gcp/runner) module to integrate with
-existing infrastructure.
+This stack can run production Tilebox workloads. To keep setup simple, it does not create a GCP project, organization
+IAM, Shared VPC, Google Cloud log aggregation, budgets, policy controls, or customer-specific security configuration.
+API services remain enabled after destroy. Use the low-level [`gcp/runner`](../../../modules/gcp/runner) module to
+integrate with existing infrastructure.
 
 With Google Cloud credentials configured and billing enabled on the project, the complete quickstart is:
 
