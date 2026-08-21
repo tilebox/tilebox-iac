@@ -1,4 +1,4 @@
-# Inputs for deploying runners into caller-owned AWS infrastructure.
+# Inputs for the nested runner module that deploys into caller-owned AWS infrastructure.
 variable "name" {
   description = "Name used for the Auto Scaling Group and module-owned IAM resources."
   type        = string

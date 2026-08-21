@@ -9,8 +9,9 @@ Provider-specific modules live under `modules/`; deployable examples live under 
 
 - Keep the high-level AWS and GCP modules optimized for trivial adoption. They create minimal networking and managed
   secrets, then compose the corresponding low-level runner module.
-- Keep low-level runner modules existing-infrastructure-first. AWS consumes subnet IDs; GCP consumes project, network,
-  and subnetwork inputs; CREODIAS consumes optional shared network IDs.
+- Keep the nested low-level runner modules (`modules/aws/runner` and `modules/gcp/runner`)
+  existing-infrastructure-first. AWS consumes subnet IDs; GCP consumes project, network, and subnetwork inputs;
+  CREODIAS consumes optional shared network IDs.
 - Do not add project, organization, or broad landing-zone ownership. The high-level modules own only the minimal
   provider-local infrastructure required by their runner fleet.
 - Quickstart examples should remain thin roots that call the same high-level modules users call directly.

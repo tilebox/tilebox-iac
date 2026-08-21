@@ -1,4 +1,4 @@
-# Inputs for deploying runners into caller-owned Google Cloud infrastructure.
+# Inputs for the nested runner module that deploys into caller-owned Google Cloud infrastructure.
 variable "name" {
   description = "Name prefix for runner resources."
   type        = string

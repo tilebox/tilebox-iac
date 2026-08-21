@@ -5,7 +5,7 @@ and creates a small VPC, regional subnetwork, Cloud Router/NAT, Secret Manager s
 
 It is a minimal stack rather than a production landing zone. It does not create a GCP project, organization IAM,
 Shared VPC, centralized logging, budgets, policy controls, or customer-specific security configuration. API services
-remain enabled after destroy. Use the low-level [`gcp-runner`](../../../modules/gcp-runner) module to integrate with
+remain enabled after destroy. Use the low-level [`gcp/runner`](../../../modules/gcp/runner) module to integrate with
 existing infrastructure.
 
 With Google Cloud credentials configured and billing enabled on the project, the complete quickstart is:

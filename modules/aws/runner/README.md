@@ -45,7 +45,7 @@ redacts CLI output; it does not remove data from state. Protect state accordingl
 - Launch-template changes trigger a rolling instance refresh. The parity default allows zero healthy instances during
   a refresh, so a single-runner fleet may be briefly unavailable.
 
-Start with [`modules/aws`](../aws) or [`examples/aws/quickstart`](../../examples/aws/quickstart) for the minimal
+Start with [`modules/aws`](..) or [`examples/aws/quickstart`](../../../examples/aws/quickstart) for the minimal
 batteries-included stack, or
-[`examples/aws/existing-infrastructure`](../../examples/aws/existing-infrastructure) to integrate the module into
+[`examples/aws/existing-infrastructure`](../../../examples/aws/existing-infrastructure) to integrate the module into
 customer-owned networking and secrets.

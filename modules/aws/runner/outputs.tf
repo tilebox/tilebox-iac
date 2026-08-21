@@ -1,4 +1,4 @@
-# Outputs from the low-level AWS runner fleet.
+# Outputs from the nested low-level AWS runner fleet.
 output "autoscaling_group_name" {
   description = "Name of the runner Auto Scaling Group."
   value       = aws_autoscaling_group.runner.name

@@ -85,7 +85,7 @@ resource "aws_secretsmanager_secret_version" "tilebox_api_key" {
 }
 
 module "runner" {
-  source = "../aws-runner"
+  source = "./runner"
 
   name                  = var.name
   instance_type         = var.instance_type

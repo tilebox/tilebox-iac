@@ -71,7 +71,7 @@ resource "google_secret_manager_secret_version" "tilebox_api_key" {
 }
 
 module "runner" {
-  source = "../gcp-runner"
+  source = "./runner"
 
   name                  = var.name
   project_id            = var.project_id

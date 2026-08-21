@@ -16,5 +16,5 @@ IPv4 addresses but no inbound security-group rules. This is an opinionated start
 zone.
 
 The API key is stored in Secrets Manager and in Terraform/OpenTofu state. Protect the state appropriately. Users with
-stricter networking, state, or secret-management requirements should use [`modules/aws-runner`](../aws-runner) with
+stricter networking, state, or secret-management requirements should use [`modules/aws/runner`](runner) with
 their existing infrastructure and secret identifiers.

@@ -1,4 +1,4 @@
-# Low-level compute module. Callers provide an existing project, network, subnetwork, and secret identifiers.
+# Nested low-level compute module. Callers provide an existing project, network, subnetwork, and secret identifiers.
 locals {
   create_service_account = var.service_account_email == null
   service_account_id     = coalesce(var.service_account_id, var.name)

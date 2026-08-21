@@ -1,4 +1,4 @@
-# Provider requirements for the low-level AWS runner module.
+# Provider requirements for the nested low-level AWS runner module.
 terraform {
   required_version = ">= 1.5.0"
 

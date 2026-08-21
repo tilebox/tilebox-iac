@@ -1,4 +1,4 @@
-# Outputs from the low-level GCP runner fleet.
+# Outputs from the nested low-level GCP runner fleet.
 output "service_account_email" {
   description = "Email of the module-created or caller-supplied runner service account."
   value       = local.service_account_email

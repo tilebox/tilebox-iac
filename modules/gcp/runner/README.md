@@ -51,7 +51,7 @@ The VPC firewall and COS guest firewall both allow port 8080 only from `130.211.
 - Executable COS helpers live under `/etc` because `/usr` is read-only and generic `/var` and `/tmp` mounts are
   non-executable.
 
-Start with [`modules/gcp`](../gcp) or [`examples/gcp/quickstart`](../../examples/gcp/quickstart) for the minimal
+Start with [`modules/gcp`](..) or [`examples/gcp/quickstart`](../../../examples/gcp/quickstart) for the minimal
 batteries-included stack, or
-[`examples/gcp/existing-infrastructure`](../../examples/gcp/existing-infrastructure) to integrate the module into
+[`examples/gcp/existing-infrastructure`](../../../examples/gcp/existing-infrastructure) to integrate the module into
 customer-owned networking and secrets.

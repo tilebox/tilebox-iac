@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 module "runner" {
-  source = "../../../modules/aws-runner"
+  source = "../../../modules/aws/runner"
 
   name               = var.name
   instance_type      = var.instance_type

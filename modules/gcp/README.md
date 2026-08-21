@@ -16,5 +16,5 @@ Configure Google Cloud credentials through the inherited provider or Application
 exist and have billing enabled; the module intentionally does not create projects or organization-level infrastructure.
 
 The API key is stored in Secret Manager and in Terraform/OpenTofu state. Protect the state appropriately. Users with
-stricter networking, state, or secret-management requirements should use [`modules/gcp-runner`](../gcp-runner) with
+stricter networking, state, or secret-management requirements should use [`modules/gcp/runner`](runner) with
 their existing infrastructure and secret identifiers.

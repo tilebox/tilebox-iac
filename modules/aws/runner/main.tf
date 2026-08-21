@@ -1,4 +1,4 @@
-# Low-level compute module. Callers provide existing subnets and secret identifiers.
+# Nested low-level compute module. Callers provide existing subnets and secret identifiers.
 data "aws_partition" "current" {}
 
 data "aws_caller_identity" "current" {}

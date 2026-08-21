@@ -5,7 +5,7 @@ an outbound-only security group, a Secrets Manager secret, and the autoscaling r
 
 It is a minimal stack rather than a production landing zone. Runner instances receive public IPv4 addresses; the
 module does not provide private subnets, NAT gateways, VPC endpoints, organization controls, centralized logging, or
-customer-specific security policy. Use the low-level [`aws-runner`](../../../modules/aws-runner) module to integrate
+customer-specific security policy. Use the low-level [`aws/runner`](../../../modules/aws/runner) module to integrate
 with existing infrastructure.
 
 With AWS credentials configured, the complete quickstart is:

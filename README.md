@@ -12,9 +12,9 @@ low-level runner module to use customer-owned networking and secrets instead.
 | Module | Layer | Creates or consumes |
 | --- | --- | --- |
 | [`modules/aws`](modules/aws) | High-level default | Minimal VPC, public subnets, managed secret, and Spot runner fleet |
-| [`modules/aws-runner`](modules/aws-runner) | Low-level | Runner fleet using existing subnets, security groups, and secret identifiers |
+| [`modules/aws/runner`](modules/aws/runner) | Low-level | Runner fleet using existing subnets, security groups, and secret identifiers |
 | [`modules/gcp`](modules/gcp) | High-level default | APIs, minimal VPC/NAT, managed secret, and auto-healed Spot runner fleet inside an existing project |
-| [`modules/gcp-runner`](modules/gcp-runner) | Low-level | Runner fleet using an existing project, VPC, subnetwork, and secret identifiers |
+| [`modules/gcp/runner`](modules/gcp/runner) | Low-level | Runner fleet using an existing project, VPC, subnetwork, and secret identifiers |
 | [`modules/creodias`](modules/creodias) | Cluster | CloudFerro Managed Kubernetes cluster and autoscaled runner worker pool, optionally using shared network IDs |
 | [`modules/kubernetes-runner`](modules/kubernetes-runner) | Workload | Runner Deployment, Secret, ServiceAccount, and HPA on an existing Kubernetes cluster |
 
@@ -75,7 +75,7 @@ and configure a remote backend. For example:
 
 ```hcl
 module "runner" {
-  source = "git::https://github.com/tilebox/tilebox-iac.git//modules/aws-runner?ref=<release-or-commit>"
+  source = "git::https://github.com/tilebox/tilebox-iac.git//modules/aws/runner?ref=<release-or-commit>"
 
   # See examples/aws/existing-infrastructure for the required inputs.
 }
