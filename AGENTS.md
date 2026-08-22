@@ -32,6 +32,7 @@ Provider-specific modules live under `modules/`; deployable examples live under 
   example values.
 - Default AWS and GCP boot volumes to 60 GiB, keep the size configurable through `root_volume_size_gb`, and delete boot
   volumes with their instances.
+- Encrypt AWS root volumes with the account's default EBS KMS key, even when account-level EBS encryption is disabled.
 - Keep startup templates responsible for pulling and starting the image. The image entrypoint owns runner lifecycle.
 
 ## Reliability contract

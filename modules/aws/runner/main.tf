@@ -165,6 +165,7 @@ resource "aws_launch_template" "runner" {
 
     ebs {
       delete_on_termination = true
+      encrypted             = true
       volume_size           = var.root_volume_size_gb
       volume_type           = "gp3"
     }

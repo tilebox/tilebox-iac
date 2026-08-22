@@ -6,7 +6,7 @@ policies, or shared networking.
 
 ## What it creates
 
-- an Amazon Linux 2023 launch template with a 60 GiB gp3 root volume by default;
+- an Amazon Linux 2023 launch template with a 60 GiB encrypted gp3 root volume by default;
 - a Spot Auto Scaling Group with capacity rebalance and CPU target tracking;
 - either a minimal workload IAM role and instance profile or mandatory policies on an existing role;
 - systemd/cloud-init integration that pulls and restarts the runner container;
@@ -39,6 +39,7 @@ redacts CLI output; it does not remove data from state. Protect state accordingl
 
 - Existing subnets need outbound access to package repositories, the image registry, Tilebox, AWS APIs, and Secrets
   Manager when configured.
+- Root volumes are encrypted with the account's default EBS KMS key.
 - The default AMI lookup is x86_64. Pass `ami_id` for ARM instance types.
 - CPU autoscaling cannot scale from zero, so `min_replicas` must be at least one while `enabled = true`.
 - Setting `enabled = false` keeps the infrastructure while setting min/max/desired capacity to zero.
