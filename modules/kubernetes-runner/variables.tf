@@ -101,7 +101,7 @@ variable "cpu_target" {
 }
 
 variable "min_replicas" {
-  description = "Minimum runner pods. CREODIAS Managed Kubernetes scale-to-zero is not documented."
+  description = "Minimum number of runner pods."
   type        = number
   default     = 1
 
@@ -112,7 +112,7 @@ variable "min_replicas" {
 }
 
 variable "max_replicas" {
-  description = "Maximum runner pods. Keep this equal to the CREODIAS node-pool maximum."
+  description = "Maximum number of runner pods. Each pod requires a separate node with the runner-pool label."
   type        = number
 
   validation {
