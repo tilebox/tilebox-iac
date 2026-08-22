@@ -38,8 +38,8 @@ already exists.
    tofu apply
    ```
 
-The kubeconfig and both state files contain credentials. The commands above keep the kubeconfig outside the repository;
-store it and the state only in protected locations/backends, and remove the exported file when it is no longer needed.
+The kubeconfig and both state files contain credentials. The commands above keep the kubeconfig outside the repository.
+Store the kubeconfig and state where access is restricted, and delete the kubeconfig file when it is no longer needed.
 
 ## Destroy
 
@@ -51,4 +51,4 @@ cd ../cluster && tofu destroy
 ```
 
 Terraform/OpenTofu cannot enforce ordering across states. Destroying the cluster first prevents the Kubernetes provider
-from removing workload resources and leaves them stranded in runner state.
+from removing workload resources. The runner state would still record resources in a cluster that no longer exists.

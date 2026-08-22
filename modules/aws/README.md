@@ -1,8 +1,7 @@
 # Tilebox runner cluster for AWS
 
-This is the default, high-level AWS module. It creates the minimal VPC, two public subnets, internet routing,
-outbound-only security group, Secrets Manager secret, and autoscaling runner fleet needed to start running Tilebox
-workflows.
+This high-level AWS module creates a VPC, two public subnets, internet routing, an outbound-only security group, a
+Secrets Manager secret, and an autoscaling runner fleet.
 
 ```hcl
 module "tilebox" {
@@ -12,9 +11,8 @@ module "tilebox" {
 ```
 
 Configure the AWS provider in the root or through standard AWS environment variables. Runner instances receive public
-IPv4 addresses but no inbound security-group rules. The module creates only the listed resources; it does not manage
-broader account networking, security, or organization configuration.
+IPv4 addresses but no inbound security-group rules. The module creates only the listed resources. It does not configure
+other account networking, security, or organization settings.
 
-The API key is stored in Secrets Manager and in Terraform/OpenTofu state. Protect the state appropriately. Users with
-stricter networking, state, or secret-management requirements should use [`modules/aws/runner`](runner) with
-their existing infrastructure and secret identifiers.
+The API key is stored in Secrets Manager and in Terraform/OpenTofu state. Use [`modules/aws/runner`](runner) with
+existing infrastructure and a secret identifier to keep the API key out of state.

@@ -1,8 +1,7 @@
 # Tilebox runner cluster for Google Cloud
 
-This is the default, high-level Google Cloud module. It enables the required APIs and creates the minimal VPC,
-subnetwork, Cloud Router/NAT, Secret Manager secret, and autoscaling runner fleet needed to start running Tilebox
-workflows inside an existing project.
+This high-level Google Cloud module enables the required APIs and creates a VPC, subnetwork, Cloud Router/NAT, Secret
+Manager secret, and autoscaling runner fleet in an existing project.
 
 ```hcl
 module "tilebox" {
@@ -13,8 +12,7 @@ module "tilebox" {
 ```
 
 Configure Google Cloud credentials through the inherited provider or Application Default Credentials. The project must
-exist and have billing enabled; the module intentionally does not create projects or organization-level infrastructure.
+exist and have billing enabled. The module does not create projects or organization-level resources.
 
-The API key is stored in Secret Manager and in Terraform/OpenTofu state. Protect the state appropriately. Users with
-stricter networking, state, or secret-management requirements should use [`modules/gcp/runner`](runner) with
-their existing infrastructure and secret identifiers.
+The API key is stored in Secret Manager and in Terraform/OpenTofu state. Use [`modules/gcp/runner`](runner) with
+existing infrastructure and a secret identifier to keep the API key out of state.

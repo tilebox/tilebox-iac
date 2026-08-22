@@ -7,28 +7,28 @@ Kubernetes workloads.
 Use it with [`modules/kubernetes-runner`](../kubernetes-runner) in two separate root configurations and states:
 
 1. Apply the CREODIAS cluster state.
-2. Export its sensitive kubeconfig to a protected local path.
+2. Write its sensitive kubeconfig to a local file with restricted permissions.
 3. Configure the Kubernetes provider in the runner root and apply the runner state.
 
-A reusable child module cannot safely configure the Kubernetes provider from a kubeconfig produced by a resource
-inside that same module. The split also keeps provider credentials and lifecycle ownership explicit.
+A child module cannot configure the Kubernetes provider from a kubeconfig created during the same plan. Use separate
+states so the cluster exists before the Kubernetes provider connects to it.
 
 ## Lifecycle order
 
 - Apply: cluster state, then runner state.
 - Destroy: runner state, then cluster state.
-- Before replacing the cluster, remove or reconcile the runner state against the old API server.
+- Before replacing the cluster, destroy the runner resources while the old Kubernetes API server is available.
 
-Terraform/OpenTofu cannot create a dependency across these two states. Destroying the cluster first leaves Kubernetes
-resources stranded in runner state.
+Terraform/OpenTofu cannot create a dependency across these two states. If the cluster is destroyed first, the runner
+state still records Kubernetes resources that Terraform can no longer delete.
 
-The kubeconfig is stored in the cluster state even though it is marked sensitive. Treat the backend as a credential
-store. Prefer a protected `kubeconfig_path` in the runner root over `terraform_remote_state`, which would copy the
-credential into a second state without solving destroy ordering.
+The kubeconfig is stored in the cluster state even though it is marked sensitive. Anyone who can read the state can
+read the kubeconfig. Pass the path of a local file with restricted permissions to `kubeconfig_path` in the runner root.
+Do not use `terraform_remote_state`; it copies the credential into a second state without enforcing destroy order.
 
 ## Scaling behavior
 
-The node pool is labeled and tainted with `tilebox.com/runner-pool = name`. The companion runner module places at most
+The node pool is labeled and tainted with `tilebox.com/runner-pool = name`. The Kubernetes runner module places at most
 one runner pod on each worker. Kubernetes HPA creates additional replicas when CPU exceeds its target; required pod
 anti-affinity leaves extra replicas Pending, and CloudFerro's managed Cluster Autoscaler adds workers. HPA scale-down
 eventually leaves empty nodes for removal.

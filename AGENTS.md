@@ -55,6 +55,11 @@ Provider-specific modules live under `modules/`; deployable examples live under 
 - Note that high-level-module secret payloads enter state, without overwhelming the quickstart documentation.
 - Never add real credentials, `.tfvars`, plans, state, or kubeconfigs to the repository.
 
+## Documentation
+
+- Use precise, plain technical English in README files. Name the resources and behavior directly. Avoid marketing
+  language, idioms, and consulting jargon.
+
 ## Development
 
 - Support Terraform and OpenTofu 1.5 or newer.
