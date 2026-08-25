@@ -1,6 +1,10 @@
-runner_cpu_request    = "3500m"
-runner_memory_request = "14Gi"
+runner_cpu_request    = "1000m"
+runner_memory_request = null
+cpu_target            = 0.2
+min_replicas          = 1
+max_replicas          = 10
 
-environment_variables = {
-  TILEBOX_CLUSTER = "replace-with-an-optional-cluster-slug"
-}
+# Optional: select a non-default Tilebox cluster.
+# environment_variables = {
+#   TILEBOX_CLUSTER = "replace-with-your-cluster-slug"
+# }

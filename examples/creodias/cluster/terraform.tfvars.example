@@ -1,6 +1,9 @@
-kubernetes_version   = "replace-with-an-exact-version-offered-in-your-region"
-control_plane_flavor = "replace-with-an-available-control-plane-flavor"
-worker_flavor        = "replace-with-an-available-worker-flavor"
+kubernetes_version   = "1.34.9"
+control_plane_flavor = "eo1a.medium"
+control_plane_size   = 1
+worker_flavor        = "eo2a.large"
+min_replicas         = 1
+max_replicas         = 10
 
 # Optional existing network IDs. Configure OpenStack network RBAC before use.
 shared_network_ids = []
