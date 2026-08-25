@@ -1,7 +1,6 @@
 # Tilebox runner infrastructure module for CREODIAS
 
-This module creates a CloudFerro Managed Kubernetes control plane and a dedicated autoscaled worker node pool through
-`CloudFerro/cloudferro` 0.1.3. It does not configure the CloudFerro provider, create OpenStack networking, or deploy
+This module creates a CloudFerro Managed Kubernetes control plane and a dedicated autoscaled worker node pool. It does not configure the CloudFerro provider, create OpenStack networking, or deploy
 Kubernetes workloads.
 
 Use it with [`modules/kubernetes-runner`](../kubernetes-runner) in two separate root configurations and states:
@@ -28,14 +27,12 @@ Do not use `terraform_remote_state`; it copies the credential into a second stat
 
 ## Scaling behavior
 
-The node pool is labeled and tainted with `tilebox.com/runner-pool = name`. The Kubernetes runner module places at most
-one runner pod on each worker. Kubernetes HPA creates additional replicas when CPU exceeds its target; required pod
-anti-affinity leaves extra replicas Pending, and CloudFerro's managed Cluster Autoscaler adds workers. HPA scale-down
-eventually leaves empty nodes for removal.
+The module reserves the worker pool for Tilebox runners. The Kubernetes runner module runs no more than one runner on
+each worker. When average CPU use rises above the configured target, Kubernetes starts more runners. If every worker is
+occupied, a new runner waits while CloudFerro adds another worker. When CPU use falls, Kubernetes stops extra runners
+and CloudFerro can remove empty workers.
 
-This depends on Kubernetes resource metrics and the managed Cluster Autoscaler. Verify both in a live cluster. Provider
-0.1.3 does not expose spot workers or configurable worker boot-volume sizes, and CREODIAS scale-to-zero is not
-documented, so `min_replicas` must be at least one.
+CPU-based runner scaling requires the Kubernetes Metrics API. Worker scaling requires CloudFerro autoscaling, which
+the module enables. Check both after creating the cluster. Provider 0.1.3 cannot create Spot workers.
 
-`shared_network_ids` accepts existing OpenStack networks only. Configure the required network RBAC before applying;
-otherwise a pool can remain in `Awaiting Network`. The module does not take ownership of OpenStack networking.
+`shared_network_ids` accepts existing OpenStack networks only. The module does not take ownership of OpenStack networking.
