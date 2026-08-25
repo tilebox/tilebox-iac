@@ -23,7 +23,8 @@ already exists.
    tofu apply
    export CREODIAS_KUBECONFIG="$HOME/.kube/tilebox-creodias.yaml"
    install -d -m 0700 "$(dirname "$CREODIAS_KUBECONFIG")"
-   umask 077
+   touch "$CREODIAS_KUBECONFIG"
+   chmod 600 "$CREODIAS_KUBECONFIG"
    tofu output -raw kubeconfig > "$CREODIAS_KUBECONFIG"
    ```
 
