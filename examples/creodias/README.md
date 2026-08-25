@@ -21,11 +21,9 @@ already exists.
    cp terraform.tfvars.example terraform.tfvars
    tofu init
    tofu apply
-   export CREODIAS_KUBECONFIG="$HOME/.kube/tilebox-creodias.yaml"
-   install -d -m 0700 "$(dirname "$CREODIAS_KUBECONFIG")"
-   touch "$CREODIAS_KUBECONFIG"
-   chmod 600 "$CREODIAS_KUBECONFIG"
-   tofu output -raw kubeconfig > "$CREODIAS_KUBECONFIG"
+   mkdir -p "$HOME/.kube"
+   tofu output -raw kubeconfig > "$HOME/.kube/tilebox-creodias.yaml"
+   chmod 600 "$HOME/.kube/tilebox-creodias.yaml"
    ```
 
 3. Supply the Tilebox API key through the environment and apply the runner root:
@@ -33,7 +31,7 @@ already exists.
    ```bash
    cd ../runner
    cp terraform.tfvars.example terraform.tfvars
-   export TF_VAR_kubeconfig_path="$CREODIAS_KUBECONFIG"
+   export TF_VAR_kubeconfig_path="$HOME/.kube/tilebox-creodias.yaml"
    export TF_VAR_tilebox_api_key='replace-with-your-api-key'
    tofu init
    tofu apply
