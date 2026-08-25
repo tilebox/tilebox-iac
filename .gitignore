@@ -23,8 +23,8 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# This repository contains multiple independently validated roots. Consumers
-# should commit the lock file generated in their own root configuration.
+# Validation creates a temporary lock file in every module and example.
+# This rule affects only this repository; deployment repositories should commit their lock files.
 .terraform.lock.hcl
 
 # Editors and operating systems
