@@ -27,11 +27,10 @@ Do not use `terraform_remote_state`; it copies the credential into a second stat
 
 ## Scaling behavior
 
-The module labels the worker pool for Tilebox runners but does not taint it. This allows managed components such as
-metrics-server to run on a worker. The Kubernetes runner module uses the label to select this pool and runs no more than
-one runner on each worker. When average CPU use rises above the configured target, Kubernetes starts more runners. If
-every worker is occupied, a new runner waits while CloudFerro adds another worker. When CPU use falls, Kubernetes stops
-extra runners and CloudFerro can remove empty workers.
+The module labels the worker pool for Tilebox runners. The Kubernetes runner module uses the label to select this pool
+and runs no more than one runner on each worker. When average CPU use rises above the configured target, Kubernetes
+starts more runners. If every worker is occupied, a new runner waits while CloudFerro adds another worker. When CPU use
+falls, Kubernetes stops extra runners and CloudFerro can remove empty workers.
 
 CPU-based runner scaling requires the Kubernetes Metrics API. Worker scaling requires CloudFerro autoscaling, which
 the module enables. Check both after creating the cluster. Provider 0.1.3 cannot create Spot workers.

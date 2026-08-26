@@ -120,9 +120,7 @@ created during the same plan. If the cluster is destroyed first, the runner stat
 that Terraform can no longer delete.
 
 Kubernetes starts more runners when CPU use rises. Each runner requires a separate worker with the runner-pool label,
-so CloudFerro adds workers when needed. The worker pool is not tainted, which allows managed components such as
-metrics-server to run there. CPU-based runner scaling requires the Kubernetes Metrics API. CloudFerro does not document
-scale-to-zero, so the minimum runner and worker count is one and the managed control plane remains allocated.
+so CloudFerro adds workers when needed. CPU-based runner scaling requires the Kubernetes Metrics API.
 
 CloudFerro's provider is not mirrored by the OpenTofu registry. The CREODIAS module and example use this source and
 version:

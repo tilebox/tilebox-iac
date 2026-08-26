@@ -50,7 +50,7 @@ variable "worker_flavor" {
 }
 
 variable "min_replicas" {
-  description = "Minimum runner workers. CREODIAS Managed Kubernetes scale-to-zero is not documented."
+  description = "Minimum number of runner workers."
   type        = number
   default     = 1
 

@@ -47,8 +47,7 @@ Provider-specific modules live under `modules/`; deployable examples live under 
   helpers under `/etc` and recreate stateless configuration on every boot.
 - Keep CREODIAS runner placement at one runner per worker and select workers with the dedicated runner-pool label. Do
   not taint the worker pool; managed components such as metrics-server must be able to run there.
-- Keep updates from creating extra runner pods, wait five minutes before reducing the runner count, and do not mount a
-  Kubernetes API token in runner pods.
+- Keep updates from creating extra runner pods, and do not mount a Kubernetes API token in runner pods.
 
 ## State and secrets
 
