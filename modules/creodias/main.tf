@@ -28,14 +28,6 @@ resource "cloudferro_kubernetes_node_pool_v1" "runner" {
     },
   ]
 
-  taints = [
-    {
-      key    = local.runner_pool_label
-      value  = var.name
-      effect = "NoSchedule"
-    },
-  ]
-
   shared_networks = var.shared_network_ids
 
   lifecycle {

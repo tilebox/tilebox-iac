@@ -45,8 +45,10 @@ Provider-specific modules live under `modules/`; deployable examples live under 
   liveness, Tilebox connectivity, or task execution checks.
 - Container-Optimized OS mounts `/usr` read-only and generic `/var` and `/tmp` as non-executable. Put executable startup
   helpers under `/etc` and recreate stateless configuration on every boot.
-- Preserve the CREODIAS runner's required one-pod-per-host anti-affinity, dedicated runner pool label/taint, zero-surge
-  rollout, HPA scale-down stabilization, and disabled service-account token.
+- Keep CREODIAS runner placement at one runner per worker and select workers with the dedicated runner-pool label. Do
+  not taint the worker pool; managed components such as metrics-server must be able to run there.
+- Keep updates from creating extra runner pods, wait five minutes before reducing the runner count, and do not mount a
+  Kubernetes API token in runner pods.
 
 ## State and secrets
 
