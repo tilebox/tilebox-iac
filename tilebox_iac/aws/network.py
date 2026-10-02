@@ -2,7 +2,7 @@ import ipaddress
 
 import pulumi_aws as aws
 import pulumi_aws.ec2 as aws_ec2
-from pulumi import ComponentResource, ResourceOptions
+from pulumi import ComponentResource, InvokeOptions, ResourceOptions
 
 
 class Network(ComponentResource):
@@ -15,18 +15,7 @@ class Network(ComponentResource):
         cidr_block: str = "10.10.0.0/16",
         opts: ResourceOptions | None = None,
     ) -> None:
-        """An AWS VPC network with public and private subnets, optional NAT Gateway and S3 VPC endpoint.
-
-        Args:
-            name: Name of the network.
-            aws_region: The AWS region to deploy the network in.
-            enable_s3_endpoint: Whether to create an S3 Gateway VPC endpoint for private subnet access to S3
-                without incurring NAT Gateway data transfer charges.
-            enable_internet_access: Whether to enable internet access for VMs in the private subnet. If `True`,
-                an Elastic IP and NAT Gateway are created to allow instances to access the internet (outbound).
-            cidr_block: The CIDR block for the VPC.
-            opts: Pulumi resource options.
-        """
+        """Create public and private AWS subnets with optional NAT and an S3 endpoint."""
         super().__init__("tilebox:aws:Network", name, opts=opts)
 
         self.vpc = aws_ec2.Vpc(
@@ -41,7 +30,7 @@ class Network(ComponentResource):
         self.vpc_id = self.vpc.id
 
         # Dynamically select AZ (not all regions have zone "a", and some accounts lack access to specific zones)
-        available_azs = aws.get_availability_zones(state="available")
+        available_azs = aws.get_availability_zones(state="available", opts=InvokeOptions(parent=self))
         first_az = available_azs.names[0]
 
         # Derive /24 subnets from the VPC CIDR block

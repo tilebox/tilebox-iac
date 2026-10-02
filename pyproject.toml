@@ -1,26 +1,28 @@
 [project]
 name = "tilebox_iac"
 version = "0.1.0"
-description = "IaC for auto-scaling clusters utilizing GCP and AWS Spot instances."
+description = "Pulumi components for Tilebox runners on AWS, GCP, Azure, and Kubernetes."
 readme = "README.md"
 authors = [{ name = "Tilebox, Inc.", email = "support@tilebox.com" }]
 requires-python = ">=3.10"
 dependencies = [
     "jinja2>=3.1.6",
-    "pulumi>=3.186.0",
-    "pulumi-aws>=6.60.0",
+    "pulumi>=3.264.0",
+    "pulumi-aws>=7.0.0",
+    "pulumi-azure>=6.40.0,<7",
     "pulumi-gcp>=8.39.0",
+    "pulumi-kubernetes>=4.0.0,<5",
 ]
 
 [dependency-groups]
-dev = ["pyright>=1.1.404", "ruff>=0.12.7"]
+dev = ["ruff>=0.12.7", "ty>=0.0.84"]
 
 [tool.uv.build-backend]
 module-name = "tilebox_iac"
 module-root = ""
 
 [build-system]
-requires = ["uv_build>=0.9.6,<0.10.0"]
+requires = ["uv_build>=0.12.9,<0.13"]
 build-backend = "uv_build"
 
 [tool.ruff]
@@ -69,10 +71,4 @@ known-first-party = ["tilebox_iac"]
 
 [tool.ruff.lint.per-file-ignores]
 "*/tests/*" = ["INP001", "SLF001"]
-
-[tool.pyright]
-exclude = ["**/.ipynb_checkpoints", "**/__pycache__", ".venv"]
-# pyright needs to have all the dependencies installed to be able to type check
-# we can make sure of this by telling it to use the project venv
-venvPath = "."
-venv = ".venv"
+"examples/**/__main__.py" = ["INP001"]

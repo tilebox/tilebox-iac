@@ -1,40 +1,33 @@
-from pulumi import Alias, ComponentResource, ResourceOptions
+from pulumi import Alias, ComponentResource, Input, ResourceOptions
 from pulumi_gcp.compute import Network as _Network
 from pulumi_gcp.compute import Router, RouterNat, Subnetwork
 
 
 class Network(ComponentResource):
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         name: str,
         gcp_region: str,
         enable_private_google_access: bool = True,
         enable_internet_access: bool = True,
         opts: ResourceOptions | None = None,
+        *,
+        gcp_project: Input[str] | None = None,
     ) -> None:
-        """A network with optional Private Google Access (PGA) and an optional router for outbound internet access.
-
-        Args:
-            name: Name of the network.
-            gcp_region: The GCP region to deploy the network in.
-            enable_private_google_access: Whether to enable Private Google Access (PGA) for the subnet.
-                Private Google Access (PGA) allows VMs to access Google APIs and services using an internal IP address.
-                That way, Cloud services or GCS buckets can be accessed without incurring egress charges.
-            enable_internet_access: Whether to enable internet access for VMs in the subnet. If `True`, a router and
-                RouterNAT are created to allow VMs to access the internet (outbound).
-            opts: Pulumi resource options.
-        """
+        """Create a private subnet with optional Google API access and outbound NAT."""
         opts = ResourceOptions.merge(opts, ResourceOptions(aliases=[Alias(type_="tilebox:GCPNetwork")]))
         super().__init__("tilebox:gcp:Network", name, opts=opts)
 
         self.network = _Network(
             f"{name}-network",
+            project=gcp_project,
             name=f"{name}-network",
             auto_create_subnetworks=False,
             opts=ResourceOptions(parent=self),
         )
         self.subnet = Subnetwork(
             f"{name}-subnet",
+            project=gcp_project,
             name=f"{name}-subnet",
             ip_cidr_range="10.10.0.0/24",
             network=self.network.self_link,
@@ -46,6 +39,7 @@ class Network(ComponentResource):
         if enable_internet_access:
             self.router = Router(
                 f"{name}-router",
+                project=gcp_project,
                 name=f"{name}-router",
                 network=self.network.self_link,
                 region=gcp_region,
@@ -53,6 +47,7 @@ class Network(ComponentResource):
             )
             self.router_nat = RouterNat(
                 f"{name}-nat",
+                project=gcp_project,
                 name=f"{name}-nat",
                 router=self.router.name,
                 region=gcp_region,

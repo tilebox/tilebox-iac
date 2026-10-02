@@ -1,0 +1,5 @@
+name: tilebox-kubernetes
+runtime:
+  name: python
+  options:
+    toolchain: uv

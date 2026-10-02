@@ -2,8 +2,8 @@ import json
 from collections.abc import Sequence
 from typing import TypedDict
 
-from pulumi import ComponentResource, Input, Output, ResourceOptions
-from pulumi_aws import iam
+from pulumi import ComponentResource, Input, InvokeOutputOptions, Output, ResourceOptions
+from pulumi_aws import get_partition_output, get_region_output, iam
 from typing_extensions import NotRequired
 
 
@@ -36,6 +36,9 @@ class IAMRoleConfigDict(TypedDict):
     """S3 bucket access configurations."""
     secrets_access: NotRequired[Sequence[SecretAccessDict]]
     """Secrets Manager access configurations."""
+    existing_role_name: NotRequired[str]
+    existing_instance_profile_name: NotRequired[str]
+    secret_kms_key_arns: NotRequired[Sequence[Input[str]]]
 
 
 class IAMRole(ComponentResource):
@@ -47,17 +50,14 @@ class IAMRole(ComponentResource):
         bucket_access: Sequence[BucketAccessDict] | None = None,
         secrets_access: Sequence[SecretAccessDict] | None = None,
         opts: ResourceOptions | None = None,
+        *,
+        existing_role_name: str | None = None,
+        existing_instance_profile_name: str | None = None,
+        secret_kms_key_arns: Sequence[Input[str]] = (),
     ) -> None:
-        """Create an IAM role with associated policies and instance profile.
-
-        Args:
-            name: Role name.
-            assume_service: AWS service principal that can assume this role.
-            managed_policies: AWS managed policy ARNs to attach.
-            bucket_access: S3 bucket access configurations.
-            secrets_access: Secrets Manager access configurations.
-            opts: Pulumi resource options.
-        """
+        """Create or reuse an instance role and profile, and assign runner permissions."""
+        if (existing_role_name is None) != (existing_instance_profile_name is None):
+            raise ValueError("Supply both existing_role_name and existing_instance_profile_name")
         super().__init__("tilebox:aws:IAMRole", name, opts=opts)
 
         assume_role_policy = json.dumps(
@@ -73,11 +73,15 @@ class IAMRole(ComponentResource):
             }
         )
 
-        self.role = iam.Role(
-            f"{name}-role",
-            name=name,
-            assume_role_policy=assume_role_policy,
-            opts=ResourceOptions(parent=self),
+        self.role = (
+            iam.Role.get(f"{name}-role", existing_role_name, opts=ResourceOptions(parent=self))
+            if existing_role_name
+            else iam.Role(
+                f"{name}-role",
+                name=name,
+                assume_role_policy=assume_role_policy,
+                opts=ResourceOptions(parent=self),
+            )
         )
 
         self.policy_attachments = []
@@ -118,7 +122,7 @@ class IAMRole(ComponentResource):
                     }
                 )
 
-            policy_document = Output.from_input(bucket_arn).apply(make_policy_document)
+            policy_document = Output.apply(Output.from_input(bucket_arn), make_policy_document)
 
             self.bucket_policies.append(
                 iam.RolePolicy(
@@ -150,7 +154,7 @@ class IAMRole(ComponentResource):
                     }
                 )
 
-            policy_document = Output.from_input(secret_arn).apply(make_secret_policy_document)
+            policy_document = Output.apply(Output.from_input(secret_arn), make_secret_policy_document)
 
             self.secret_policies.append(
                 iam.RolePolicy(
@@ -161,11 +165,49 @@ class IAMRole(ComponentResource):
                 )
             )
 
-        self.instance_profile = iam.InstanceProfile(
-            f"{name}-instance-profile",
-            name=name,
-            role=self.role.name,
-            opts=ResourceOptions(parent=self),
+        if secret_kms_key_arns:
+            invoke_opts = InvokeOutputOptions(parent=self)
+            iam.RolePolicy(
+                f"{name}-decrypt-secrets",
+                role=self.role.name,
+                policy=Output.apply(
+                    Output.all(
+                        keys=list(secret_kms_key_arns),
+                        region=get_region_output(opts=invoke_opts).region,
+                        suffix=get_partition_output(opts=invoke_opts).dns_suffix,
+                    ),
+                    lambda values: json.dumps(
+                        {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "kms:Decrypt",
+                                    "Resource": values["keys"],
+                                    "Condition": {
+                                        "StringEquals": {
+                                            "kms:ViaService": f"secretsmanager.{values['region']}.{values['suffix']}"
+                                        }
+                                    },
+                                }
+                            ],
+                        }
+                    ),
+                ),
+                opts=ResourceOptions(parent=self),
+            )
+
+        self.instance_profile = (
+            iam.InstanceProfile.get(
+                f"{name}-instance-profile", existing_instance_profile_name, opts=ResourceOptions(parent=self)
+            )
+            if existing_instance_profile_name
+            else iam.InstanceProfile(
+                f"{name}-instance-profile",
+                name=name,
+                role=self.role.name,
+                opts=ResourceOptions(parent=self),
+            )
         )
 
         self.role_arn: Output[str] = self.role.arn
@@ -199,6 +241,9 @@ class IAMRole(ComponentResource):
             bucket_access=config.get("bucket_access"),
             secrets_access=config.get("secrets_access"),
             opts=opts,
+            existing_role_name=config.get("existing_role_name"),
+            existing_instance_profile_name=config.get("existing_instance_profile_name"),
+            secret_kms_key_arns=config.get("secret_kms_key_arns", ()),
         )
 
 

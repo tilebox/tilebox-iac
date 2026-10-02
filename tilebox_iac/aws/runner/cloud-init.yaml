@@ -1,25 +1,27 @@
 #cloud-config
-# Secret versions (for change detection): {% for secret_var, version_id in SECRET_VERSIONS.items() %}{{ secret_var }}={{ version_id }} {% endfor %}
+# Secret rollout markers: {{ SECRET_VERSIONS }}
 
 packages:
   - docker
   - awscli
 
 write_files:
-- path: /tmp/environment.env
+- path: /etc/tilebox/environment.env
   permissions: '0600'
   owner: root
   encoding: b64
   content: "{{ ENVIRONMENT_FILE }}"
 
-- path: /tmp/fetch-secrets.sh
-  permissions: '0755'
+- path: /etc/tilebox/fetch-secrets.sh
+  permissions: '0700'
   owner: root
   content: |
     #!/bin/bash
     # Fetch AWS secrets from Secrets Manager using IMDSv2 credentials
     set -euo pipefail
-    OUTPUT_FILE="${1:-/tmp/secrets.env}"
+    umask 077
+    OUTPUT_FILE="${1:-/run/tilebox/secrets.env}"
+    install -d -m 0700 "$(dirname "${OUTPUT_FILE}")"
     : > "${OUTPUT_FILE}"
     TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
     REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
@@ -82,12 +84,14 @@ write_files:
     Type=simple
     Restart=always
     RestartSec=5
-    ExecStartPre=/tmp/fetch-secrets.sh /tmp/secrets.env
+    RuntimeDirectory=tilebox
+    RuntimeDirectoryMode=0700
+    ExecStartPre=/etc/tilebox/fetch-secrets.sh /run/tilebox/secrets.env
     {% if ECR_REGION %}
     ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region {{ ECR_REGION }} | docker login --username AWS --password-stdin {{ REGISTRY_HOSTNAME }}'
     {% endif %}
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
-    ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /tmp/environment.env --env-file /tmp/secrets.env {{ CONTAINER_IMAGE }}
+    ExecStart=/usr/bin/docker run --rm --name cloudservice --env-file /etc/tilebox/environment.env --env-file /run/tilebox/secrets.env {{ CONTAINER_IMAGE }}
     ExecStop=/usr/bin/docker stop cloudservice
 
     [Install]

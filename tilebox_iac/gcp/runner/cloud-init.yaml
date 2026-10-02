@@ -1,14 +1,15 @@
 #cloud-config
+# Secret rollout markers: {{ SECRET_VERSIONS }}
 
 write_files:
-- path: /tmp/environment.env
+- path: /etc/tilebox/environment.env
   permissions: '0600'
   owner: root
   encoding: b64
   content: "{{ ENVIRONMENT_FILE }}"
 
-- path: /tmp/fetch-secrets.sh
-  permissions: '0755'
+- path: /etc/tilebox/fetch-secrets.sh
+  permissions: '0700'
   owner: root
   content: |
     #!/bin/bash
@@ -17,7 +18,8 @@ write_files:
 
     set -euo pipefail
 
-    OUTPUT_FILE="${1:-/tmp/secrets.env}"
+    umask 077
+    OUTPUT_FILE="${1:-/run/tilebox/secrets.env}"
     # Always create a fresh env file so the service can start even when no secrets are configured.
     : > "${OUTPUT_FILE}"
 
@@ -92,12 +94,14 @@ write_files:
     {% if GCP_REGISTRY_HOSTNAME %}
     ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries {{ GCP_REGISTRY_HOSTNAME }}
     {% endif %}
-    ExecStartPre=/bin/bash /tmp/fetch-secrets.sh
+    RuntimeDirectory=tilebox
+    RuntimeDirectoryMode=0700
+    ExecStartPre=/bin/bash /etc/tilebox/fetch-secrets.sh
     ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
 
     ExecStart=/usr/bin/docker run --rm \
-      --env-file /tmp/environment.env \
-      --env-file /tmp/secrets.env \
+      --env-file /etc/tilebox/environment.env \
+      --env-file /run/tilebox/secrets.env \
       --name %n \
       {{ CONTAINER_IMAGE }}
     ExecStop=-/usr/bin/docker stop %n
