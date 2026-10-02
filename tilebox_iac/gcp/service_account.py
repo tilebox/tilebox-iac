@@ -53,6 +53,7 @@ class ServiceAccountConfigDict(TypedDict):
     service_roles: NotRequired[Sequence[ServiceRoleDict]]
     repository_roles: NotRequired[Sequence[RepositoryRoleDict]]
     secret_roles: NotRequired[Sequence[SecretRoleDict]]
+    existing_email: NotRequired[str]
 
 
 class ServiceAccount(ComponentResource):
@@ -66,30 +67,33 @@ class ServiceAccount(ComponentResource):
         repository_roles: Sequence[RepositoryRoleDict] | None = None,
         secret_roles: Sequence[SecretRoleDict] | None = None,
         opts: ResourceOptions | None = None,
+        *,
+        existing_email: str | None = None,
     ) -> None:
-        """Create a service account with given roles.
-
-        Args:
-            name: Service account name.
-            gcp_project: GCP project ID.
-            roles: IAM project roles to assign to the service account.
-            bucket_roles: Bucket specific roles for certain buckets.
-            service_roles: Service specific roles for certain cloud run services.
-            repository_roles: Repository specific roles for certain artifact registry repositories.
-            secret_roles: Secret specific roles for certain secrets.
-            opts: Pulumi resource options.
-        """
+        """Create or reuse a GCP service account and assign runner permissions."""
         opts = ResourceOptions.merge(
             opts, ResourceOptions(aliases=[Alias(type_="tilebox:service_account:ServiceAccount")])
         )
         super().__init__("tilebox:gcp:ServiceAccount", name, opts=opts)
 
-        self.service_account = Account(
-            f"{name}-service-account",
-            account_id=name,
-            display_name=f"Tilebox {name} Service Account",
-            project=gcp_project,
-            opts=ResourceOptions(parent=self),
+        if existing_email is None and re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", name) is None:
+            raise ValueError(
+                "Service account names must be 6-30 lowercase letters, digits or hyphens, starting with a letter"
+            )
+        self.service_account = (
+            Account.get(
+                f"{name}-service-account",
+                f"projects/{gcp_project}/serviceAccounts/{existing_email}",
+                opts=ResourceOptions(parent=self),
+            )
+            if existing_email
+            else Account(
+                f"{name}-service-account",
+                account_id=name,
+                display_name=f"Tilebox {name} Service Account",
+                project=gcp_project,
+                opts=ResourceOptions(parent=self),
+            )
         )
 
         service_account_member = Output.concat("serviceAccount:", self.service_account.email)
@@ -187,6 +191,7 @@ class ServiceAccount(ComponentResource):
             repository_roles=config.get("repository_roles"),
             secret_roles=config.get("secret_roles"),
             opts=opts,
+            existing_email=config.get("existing_email"),
         )
 
 

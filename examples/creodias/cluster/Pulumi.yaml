@@ -1,0 +1,5 @@
+name: tilebox-creodias
+runtime:
+  name: python
+  options:
+    toolchain: uv

@@ -15,3 +15,7 @@ dist/
 coverage.xml
 .coverage*
 test-report.xml
+
+.pulumi/
+Pulumi.*.yaml
+kubeconfig*

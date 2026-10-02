@@ -1,0 +1,191 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+
+write_files:
+  - path: /etc/tilebox/environment.env
+    permissions: '0600'
+    owner: root:root
+    encoding: b64
+    content: "{{ ENVIRONMENT_FILE }}"
+  - path: /etc/tilebox/secrets.json
+    permissions: '0600'
+    owner: root:root
+    encoding: b64
+    content: "{{ SECRET_CONFIG }}"
+  - path: /etc/tilebox/fetch-secrets.py
+    permissions: '0700'
+    owner: root:root
+    content: |
+      #!/usr/bin/python3
+      import json
+      import os
+      import urllib.parse
+      import urllib.request
+
+      os.umask(0o077)
+      with open('/etc/tilebox/secrets.json') as source:
+          config = json.load(source)
+      lines = []
+      if config['secrets']:
+          query = urllib.parse.urlencode({
+              'api-version': '2018-02-01',
+              'resource': 'https://vault.azure.net',
+              'client_id': config['client_id'],
+          })
+          request = urllib.request.Request(
+              'http://169.254.169.254/metadata/identity/oauth2/token?' + query,
+              headers={'Metadata': 'true'},
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              token = json.load(response)['access_token']
+          for name, url in config['secrets'].items():
+              request = urllib.request.Request(
+                  url + '?api-version=7.4', headers={'Authorization': 'Bearer ' + token},
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  value = json.load(response)['value']
+              if any(character in value for character in ('\r', '\n', '\0')):
+                  raise ValueError('Secret contains unsupported control characters')
+              lines.append(name + '=' + value + '\n')
+      with open('/run/tilebox-secrets.env', 'w') as target:
+          target.writelines(lines)
+{% if CONTAINER_REGISTRY %}
+  - path: /etc/tilebox/registry-login.py
+    permissions: '0700'
+    owner: root:root
+    content: |
+      #!/usr/bin/python3
+      import json
+      import os
+      import subprocess
+      import urllib.parse
+      import urllib.request
+
+      class NoRedirect(urllib.request.HTTPRedirectHandler):
+          def redirect_request(self, req, fp, code, msg, headers, newurl):
+              return None
+
+      def login():
+          os.umask(0o077)
+          with open('/etc/tilebox/secrets.json') as source:
+              config = json.load(source)
+          opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+          query = urllib.parse.urlencode({
+              'api-version': '2018-02-01',
+              'resource': 'https://management.azure.com/',
+              'client_id': config['client_id'],
+          })
+          request = urllib.request.Request(
+              'http://169.254.169.254/metadata/identity/oauth2/token?' + query,
+              headers={'Metadata': 'true'},
+          )
+          with opener.open(request, timeout=30) as response:
+              access_token = json.load(response)['access_token']
+          registry = config['registry_server']
+          request = urllib.request.Request(
+              'https://' + registry + '/oauth2/exchange',
+              data=urllib.parse.urlencode({
+                  'grant_type': 'access_token',
+                  'service': registry,
+                  'access_token': access_token,
+              }).encode(),
+              headers={'Content-Type': 'application/x-www-form-urlencoded'},
+          )
+          with opener.open(request, timeout=30) as response:
+              refresh_token = json.load(response)['refresh_token']
+          subprocess.run(
+              ['/usr/bin/docker', 'login', registry, '--username',
+               '00000000-0000-0000-0000-000000000000', '--password-stdin'],
+              input=refresh_token, text=True, capture_output=True, check=True, timeout=60,
+          )
+
+      try:
+          login()
+      except Exception:
+          raise SystemExit('Managed-identity registry login failed; systemd will retry') from None
+{% endif %}
+  - path: /etc/tilebox/health.sh
+    permissions: '0700'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      while IFS= read -r line; do
+          [[ "${line}" == $'\r' || -z "${line}" ]] && break
+      done
+
+      if [ "$(docker inspect --format '{% raw %}{{.State.Running}}{% endraw %}' tilebox-runner 2>/dev/null || true)" = "true" ]; then
+          printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+      else
+          printf 'HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'
+      fi
+  - path: /etc/systemd/system/tilebox-health.socket
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Tilebox runner health socket
+
+      [Socket]
+      ListenStream=127.0.0.1:8080
+      Accept=yes
+
+      [Install]
+      WantedBy=sockets.target
+  - path: /etc/systemd/system/tilebox-health@.service
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Check Tilebox runner container
+
+      [Service]
+      Type=oneshot
+      TimeoutStartSec=5s
+      ExecStart=/etc/tilebox/health.sh
+      StandardInput=socket
+      StandardOutput=socket
+  - path: /etc/systemd/system/tilebox-runner.service
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Tilebox runner container
+      Wants=network-online.target
+      After=network-online.target docker.service
+      Requires=docker.service
+      StartLimitIntervalSec=0
+
+      [Service]
+      Restart=always
+      RestartSec=30
+      TimeoutStartSec=0
+      TimeoutStopSec=120
+{% if CONTAINER_REGISTRY %}
+      RuntimeDirectory=tilebox-registry
+      RuntimeDirectoryMode=0700
+      Environment=DOCKER_CONFIG=/run/tilebox-registry
+{% endif %}
+      ExecStartPre=/etc/tilebox/fetch-secrets.py
+      ExecStartPre=-/usr/bin/docker rm -f tilebox-runner
+{% if CONTAINER_REGISTRY %}
+      ExecStartPre=/etc/tilebox/registry-login.py
+{% endif %}
+      ExecStartPre=/usr/bin/docker pull {{ CONTAINER_IMAGE }}
+{% if CONTAINER_REGISTRY %}
+      ExecStartPre=/usr/bin/rm -f /run/tilebox-registry/config.json
+{% endif %}
+      ExecStart=/usr/bin/docker run --rm --network host --name tilebox-runner --env-file /etc/tilebox/environment.env --env-file /run/tilebox-secrets.env {{ CONTAINER_IMAGE }}
+      ExecStop=/usr/bin/docker stop --time 90 tilebox-runner
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now tilebox-health.socket
+  - systemctl enable --now docker.service
+  - systemctl enable --now tilebox-runner.service

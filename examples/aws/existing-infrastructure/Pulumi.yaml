@@ -1,0 +1,5 @@
+name: tilebox-aws-existing
+runtime:
+  name: python
+  options:
+    toolchain: uv
